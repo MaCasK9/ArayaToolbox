@@ -284,6 +284,7 @@ def make_entry(card, card_type, stats, skills, order,
     q, g, ga = skills.get("quest"), skills.get("gvg"), skills.get("gvgAuto")
     return {
         "uniqueId": card["uniqueId"],
+        "cardMstId": card["cardMstId"],
         "name": card["name"],
         "cardType": card_type,
         "attribute": card["attribute"],

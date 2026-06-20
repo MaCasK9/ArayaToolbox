@@ -105,7 +105,8 @@ def marker_for(entry, context):
         bt, at = entry["baseType"], entry["addType"]
         if context == "list":
             return marker_awakening(attr, bt, at, "full")
-        return marker_awakening(attr, bt, at, "base" if entry.get("role") == "base" else "add")
+        # 组卡器：觉醒卡两个条目都用与普通卡一致的单圆角标，分别贴各自类别
+        return marker_none(attr, bt if entry.get("role") == "base" else at)
     return marker_none(attr, ct)
 
 

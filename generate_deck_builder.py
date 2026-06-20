@@ -215,6 +215,22 @@ def gvg_battle_icons(gvg_skill, fg):
 
 
 # ---------------------------------------------------------------------------
+# twdb（allb.game-db.tw）卡片编号
+# ---------------------------------------------------------------------------
+def tw_full_id(e):
+    """twdb 卡片编号 = cardMstId * 10 + 变体位。
+    变体位：普通卡=0；可觉醒卡=1（两个条目同号）；超觉醒卡=该条目 cardType(1-7)。"""
+    awk = e.get("awk", "none")
+    if awk == "awakening":
+        digit = 1
+    elif awk == "super":
+        digit = e["cardType"]
+    else:
+        digit = 0
+    return e["cardMstId"] * 10 + digit
+
+
+# ---------------------------------------------------------------------------
 # 构建选卡单元
 # ---------------------------------------------------------------------------
 def build_units(entries):
@@ -225,6 +241,7 @@ def build_units(entries):
         tgt, sk1, sk2, sk3 = gvg_battle_icons(gvg, e["fg"])
         units.append({
             "uid": e["uniqueId"],
+            "tw": tw_full_id(e),
             "name": e["name"],
             "ct": e["cardType"],
             "attr": e["attribute"],
@@ -282,7 +299,7 @@ def render_overlay(tgt, sk1, sk2, sk3):
 def render_unit(u):
     icon = CARD_ICON_URL.format(uid=u["uid"])
     return (
-        '<div class="unit" data-uid="{uid}" data-ct="{ct}" data-attr="{attr}" '
+        '<div class="unit" data-uid="{uid}" data-tw="{tw}" data-ct="{ct}" data-attr="{attr}" '
         'data-grade="{grade}" data-leg="{leg}" data-ult="{ult}" data-order="{order}" '
         'data-name="{name_attr}" data-tg="{tg}" data-fg="{fg}" data-ga="{ga_codes}" '
         'data-mt="{mt}" data-an="{an}" data-ba="{ba}" data-et="{et}" data-lv="{lv}" '
@@ -304,7 +321,7 @@ def render_unit(u):
         '{gvg_cell}{ga_cell}{leg_cell}'
         '</div>'
     ).format(
-        uid=u["uid"], ct=u["ct"], attr=u["attr"], grade=u["grade"],
+        uid=u["uid"], tw=u["tw"], ct=u["ct"], attr=u["attr"], grade=u["grade"],
         leg=1 if u["leg"] else 0, ult=1 if u["ult"] else 0, order=u["order"],
         name_attr=html.escape(u["name"], quote=True),
         tg=u["tg"], fg=" ".join(u["fg"]), ga_codes=" ".join(u["ga_codes"]),
@@ -394,6 +411,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
               max-height:calc(100vh - var(--toolbar-h) - 24px); overflow:auto;
               border:1px solid #9aa3b8; border-radius:8px; background:#f7f8fb; padding:10px; }
   .pickpane { flex:1 1 auto; min-width:0; }
+  .deckpane #code { flex:1 1 200px; min-width:150px; font-family:monospace; font-size:11px; }
 
   .deck-group { margin-bottom:12px; }
   .deck-group h3 { font-size:14px; margin:0 0 6px; color:#333; border-bottom:1px solid #c5ccda; padding-bottom:3px; }
@@ -496,7 +514,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <div class="layout">
   <aside class="deckpane">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-      <input id="code" type="text" placeholder="デッキコード" spellcheck="false">
+      <input id="code" type="text" placeholder="デッキコード (game-db URL)" spellcheck="false">
       <button class="btn" id="loadCode" type="button">読込</button>
       <button class="btn" id="copyCode" type="button">コピー</button>
       <button class="btn" id="clearDeck" type="button">デッキクリア</button>
@@ -552,13 +570,16 @@ __OTH_UNITS__
   var unitByKey = {};           // 'uid.ct' -> element
   function parseUnit(el){
     var d = el.dataset;
-    return { uid:d.uid, ct:+d.ct, attr:+d.attr, grade:+d.grade, leg:d.leg==='1',
+    return { uid:d.uid, tw:+d.tw, ct:+d.ct, attr:+d.attr, grade:+d.grade, leg:d.leg==='1',
              name:d.name, tg:d.tg||'', mark:d.mark, frame:d.frame,
              tgt:d.tgt||'', sk1:d.sk1?d.sk1.split(' '):[], sk2:d.sk2?d.sk2.split(' '):[], sk3:d.sk3?d.sk3.split(' '):[],
              fg:d.fg?d.fg.split(' '):[], ga:d.ga?d.ga.split(' '):[],
              mt:+d.mt, an:+d.an, ba:+d.ba, et:+d.et, lv:d.lv?d.lv.split(' '):[], el:el };
   }
   units.forEach(function(el){ unitByKey[el.dataset.uid+'.'+el.dataset.ct] = el; });
+  // twdb 编号 -> 单元（可觉醒卡两条目同号，故为数组）
+  var twIndex={};
+  units.forEach(function(el){ var t=el.dataset.tw; if(t) (twIndex[t]=twIndex[t]||[]).push(el); });
 
   // ---------- 下拉面板开关 ----------
   function closePanels(except){
@@ -842,29 +863,62 @@ __OTH_UNITS__
     }).join('');
   }
 
-  // ---------- デッキコード ----------
+  // ---------- デッキコード（allb.game-db.tw デッキビルダー URL）----------
+  // 形式：base64( enc62(base-61) | LG... | メイン... | role ) を ?v= に載せる。
+  //   base    = デッキ内 twdb 番号(cardMstId*10+変体)の最小値
+  //   各カード = enc62(番号 - base + 61) + "4"（末尾 "4" は限界突破位）
+  //   role    = 前衛 0 / 後衛 1
+  var B62='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  var TW_URL='https://allb.game-db.tw/deckbuilder?v=';
+  function enc62(num){ num=Math.floor(num); if(num<=0) return '0';
+    var s=''; while(num>0){ s=B62.charAt(num%62)+s; num=Math.floor(num/62); } return s; }
+  function dec62(str){ var n=0; for(var i=0;i<str.length;i++){ var k=B62.indexOf(str.charAt(i));
+    if(k<0) return NaN; n=n*62+k; } return n; }
+
   function deckCode(){
-    var pairs=deckCards().map(function(c){ return c.uid+'.'+c.ct; }).sort();
-    return role+'-'+btoa(pairs.join(','));
+    var cards=deckCards(); if(!cards.length) return '';
+    var lg=[], nml=[];
+    cards.forEach(function(c){ (c.leg?lg:nml).push(c.tw); });
+    lg.sort(function(a,b){return a-b;}); nml.sort(function(a,b){return a-b;});  // 顺序无关
+    var base=Math.min.apply(null, lg.concat(nml));
+    var tok=function(id){ return enc62(id-base+61)+'4'; };
+    var target=enc62(base-61)+'|'+lg.map(tok).join(',')+'|'+nml.map(tok).join(',')
+               +'|'+(role==='F'?0:1);
+    return TW_URL+btoa(target);
   }
   function syncCode(){ document.getElementById('code').value=deckCode(); }
   function loadCode(str){
     str=(str||'').trim(); if(!str){ return; }
-    var dash=str.indexOf('-'); if(dash<0){ alert('コード形式が不正です'); return; }
-    var r=str.slice(0,dash), body=str.slice(dash+1);
-    if(r!=='F'&&r!=='B'){ alert('コード形式が不正です'); return; }
-    var pairs=[];
-    try { var dec=body?atob(body):''; pairs=dec?dec.split(','):[]; }
-    catch(e){ alert('コードのデコードに失敗しました'); return; }
-    // 设置角色（不弹确认，直接覆盖）
+    var target, m=str.match(/[?&]v=([^&\\s]+)/);
+    try {
+      if(m) target=atob(m[1].replace(/ /g,'+'));
+      else if(str.indexOf('|')!==-1) target=str;       // 直接贴 target 文本
+      else target=atob(str.replace(/ /g,'+'));         // 直接贴 base64
+    } catch(e){ alert('コードのデコードに失敗しました'); return; }
+    var parts=target.split('|');
+    var base=dec62(parts[0])+61;
+    if(parts.length<4 || isNaN(base)){ alert('コード形式が不正です'); return; }
+    var r=(parts[3].trim()==='0')?'F':'B';
     role=r; clearSlots();
     document.getElementById('roleF').classList.toggle('on', r==='F');
     document.getElementById('roleB').classList.toggle('on', r==='B');
     applyRoleToTypeFilter();
     var miss=0;
-    pairs.forEach(function(p){ var el=unitByKey[p]; if(el){ addUnit(el, true); } else { miss++; } });
+    function place(groupStr){
+      if(!groupStr) return;
+      groupStr.split(',').forEach(function(t){
+        if(!t) return;
+        var rel=dec62(t.slice(0,-1));                  // 去掉末尾 "4"
+        if(isNaN(rel)){ miss++; return; }
+        var list=twIndex[rel-61+base]||[], el=null;
+        for(var i=0;i<list.length;i++){ if(isValidType(list[i].dataset.ct)){ el=list[i]; break; } }
+        if(!el && list.length) el=list[0];             // 觉醒卡两面都不合当前角色时退而取一
+        if(!(el && addUnit(el, true))) miss++;
+      });
+    }
+    place(parts[1]); place(parts[2]);
     renderDeck(); applyFilter();
-    if(miss) alert(miss+' 枚のカードが見つかりませんでした（データ更新で削除された可能性）');
+    if(miss) alert(miss+' 枚のカードが復元できませんでした（データ更新やタイプ不一致の可能性）');
   }
   document.getElementById('loadCode').addEventListener('click', function(){ loadCode(document.getElementById('code').value); });
   document.getElementById('code').addEventListener('keydown', function(e){ if(e.key==='Enter') loadCode(this.value); });
