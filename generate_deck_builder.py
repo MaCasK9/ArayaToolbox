@@ -741,7 +741,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   __DD_GA__
   <label class="chk"><input type="checkbox" id="deckOnly"> デッキ内のみ</label>
   <button class="btn" id="clearFilter" type="button">筛选クリア</button>
-  <button class="btn" id="pmeToggle" type="button">牌効 OFF</button>
+  <button class="btn" id="pmeToggle" type="button">スキル効果量シミュ OFF</button>
   <span id="pcount"></span>
 </header>
 
@@ -764,7 +764,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
 
     <div class="pme" id="pmePanel">
-      <h3>牌効計算 設定</h3>
+      <h3>スキル効果量シミュ 設定</h3>
       <div class="pme-grid">
         <div class="pme-blk"><b>CHARM%</b>
           <div class="pme-attrs">
@@ -1500,7 +1500,7 @@ __OTH_UNITS__
     var kindJp={dmg:'ダメージ',heal:'回復',buff:'支援',debuff:'妨害'}[bd.kind]||bd.kind;
     document.getElementById('bdTitle').innerHTML=pesc(bd.card)+' <span class="bk k-'+bd.kind+'">'+pesc(bd.label)+' ('+kindJp+')</span>';
     document.getElementById('bdBody').innerHTML=rows;
-    document.getElementById('bdTotal').textContent='牌効 = '+bd.rate.toFixed(4);
+    document.getElementById('bdTotal').textContent='スキル効果量 = '+bd.rate.toFixed(4);
     document.getElementById('bdModal').classList.add('open');
   }
   function hideBreakdown(){ document.getElementById('bdModal').classList.remove('open'); }
@@ -1513,7 +1513,7 @@ __OTH_UNITS__
   document.getElementById('pmeToggle').addEventListener('click', function(){
     var on=!deckpane.classList.contains('pme-on');
     deckpane.classList.toggle('pme-on', on);
-    this.textContent='牌効 '+(on?'ON':'OFF');
+    this.textContent='スキル効果量シミュ '+(on?'ON':'OFF');
     this.classList.toggle('active', on);
     if(on) recalcAll();
   });
