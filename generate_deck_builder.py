@@ -1385,7 +1385,7 @@ __OTH_UNITS__
         var r=(PBASE[p.plus]||0.15)+(theme[p.host]?0.02:0);
         r=r*(1+myRateUp)*(1-enRateDown); if(r<0)r=0; if(r>1)r=1;
         var add=p.coeff*1.5*r;
-        if(detail) detail.push({coeff:p.coeff, rate:r, plus:p.plus, host:p.host, add:add});
+        if(detail) detail.push({coeff:p.coeff, rate:r, plus:p.plus, host:p.host, add:add, kind:p.k});
         s+=add; });
       return s;
     }
@@ -1472,9 +1472,10 @@ __OTH_UNITS__
   }
   function adxIdx(at){ return +document.getElementById('adx'+at).value; }
   function themeSel(at){ return document.getElementById('theme'+at).checked; }
+  var UP_JP={dmg:'ダメージUP',heal:'回復UP',buff:'支援UP'};
   function upNote(pdet,ldet){
     var lines=['1'];
-    pdet.forEach(function(p){ lines.push('+ 支援UP 係数'+fmtNum(p.coeff)+'×1.5×発動'+fmtNum(p.rate)+' = '+fmtNum(p.add)); });
+    pdet.forEach(function(p){ lines.push('+ '+(UP_JP[p.kind]||p.kind)+' 係数'+fmtNum(p.coeff)+'×1.5×発動'+fmtNum(p.rate)+' = '+fmtNum(p.add)); });
     ldet.forEach(function(l){ lines.push('+ Legendary '+fmtNum(l.p)); });
     if(lines.length===1) lines.push('(UP源なし)');
     return lines.join('\\n');
