@@ -27,13 +27,16 @@ All displayed text is kept in the original Japanese (not translated).
 import os
 import re
 import html
+import json
 
 from generate_card_list import (
-    build_lookups, build_entries,
+    build_lookups, build_entries, load_mst,
     CARD_ICON_URL, CARD_TYPE_LABEL, ATTRIBUTE_LABEL,
     FEATURE_DEFS, GA_DEFS, build_dropdown, fmt, stat_flags,
 )
 import card_markers
+import skill_calc as sc
+import generate_tactics_list as gtl
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(SCRIPT_DIR, "deck_builder.html")
@@ -275,6 +278,22 @@ def passive_dot(e):
 # ---------------------------------------------------------------------------
 # Build picker units
 # ---------------------------------------------------------------------------
+def build_calc(e, gvg, ga):
+    """Static 牌効 data for one card (the live formula runs in JS). See skill_calc.py.
+    Compact keys keep the per-unit data-calc blob small."""
+    se = sc.skill_effects(gvg)
+    return {
+        "a": e["attribute"], "c": e["cardType"], "r": 0 if e["cardType"] <= 4 else 1,
+        "e": [{"k": x["kind"], "l": x["label"], "m": x["mag"],
+               "g": x["gvg"], "n": x["rand"], "t": x["atk"]} for x in se["effs"]],
+        "am": se["addMag"], "ut": se["upT"], "tm": se["timeMax"], "eh": se["eh"], "ct": se["ct"],
+        "pu": [{"k": p["kind"], "c": p["coeff"]} for p in sc.passive_up(ga)],
+        "pp": sc.passive_plus(ga),
+        "lu": [{"a": l["attr"], "k": l["kind"], "t": l["atk"], "p": l["pct"]}
+               for l in sc.legendary_up(e["skills"].get("legendary"))],
+    }
+
+
 def build_units(entries):
     units = []
     for e in entries:
@@ -283,6 +302,7 @@ def build_units(entries):
         tgt, sk1, sk2, sk3 = gvg_battle_icons(gvg, e["fg"])
         gdesc = (gvg.get("desc", "") if gvg else "") or ""
         units.append({
+            "calc": build_calc(e, gvg, ga),
             "uid": e["uniqueId"],
             "tw": tw_full_id(e),
             "name": e["name"],
@@ -355,7 +375,8 @@ def render_unit(u):
         'data-name="{name_attr}" data-tg="{tg}" data-fg="{fg}" data-ga="{ga_codes}" '
         'data-mt="{mt}" data-an="{an}" data-ba="{ba}" data-et="{et}" data-lv="{lv}" '
         'data-mark="{mark}" data-frame="{frame}" data-pdot="{pdot_color}" data-tgt="{tgt}" '
-        'data-sk1="{sk1}" data-sk2="{sk2}" data-sk3="{sk3}" data-sc="{sc}" data-heal="{heal}">'
+        'data-sk1="{sk1}" data-sk2="{sk2}" data-sk3="{sk3}" data-sc="{sc}" data-heal="{heal}" '
+        'data-calc="{calc_json}">'
         '<div class="u-top">'
         '<span class="cardimg" title="{name_attr}">'
         '<img class="art" loading="lazy" src="{icon}" alt="" onerror="this.classList.add(\'broken\')">'
@@ -382,6 +403,7 @@ def render_unit(u):
         pdot=pdot_html(u["pdot"]), pdot_color=u["pdot"],
         tgt=u["tgt"], sk1=" ".join(u["sk1"]), sk2=" ".join(u["sk2"]), sk3=" ".join(u["sk3"]),
         sc=" ".join(str(n) for n in u["sc"]), heal=u["heal"],
+        calc_json=html.escape(json.dumps(u["calc"], separators=(",", ":"), ensure_ascii=False), quote=True),
         overlay=render_overlay(u["tgt"], u["sk1"], u["sk2"], u["sk3"]),
         icon=icon,
         gvg_cell=render_mini_skill(u["gvg"], "assets/Skill2.png"),
@@ -389,6 +411,53 @@ def render_unit(u):
         leg_cell=(render_mini_skill(u["legendary"], "assets/Skill4.png")
                   if u["legendary"] else ""),
     )
+
+
+def build_tactics_options():
+    """Group the real tactics for the 牌効 active-tactics icon pickers. Only the **no-MP**
+    (sp==0) version of each GVG effect is listed (when both free and MP variants exist), one
+    entry per distinct effect with a representative tactics uniqueId (highest rarity) for its icon.
+    my side: 属性 (attr) / 発動率↑ (rate, rateUp) / 特効 (eff up); enemy side: 盾 (shield) /
+    発動率↓ (rate, rateDown) / 特効 (eff down = enemy 支援/妨害 reduction)."""
+    effects = {x["tacticsEffectMstId"]: x
+               for x in load_mst("masterdata_api_mst_getTacticsEffectMstList.json")}
+    tactics = gtl.load_tactics()
+    # names that exist as a no-MP (sp==0) effect; an MP effect is hidden only if it has such a twin
+    free_names = set()
+    for t in tactics:
+        eff = effects.get(t.get("gvgTacticsEffectMstId"))
+        if eff and eff.get("sp", 0) == 0:
+            free_names.add(eff.get("name"))
+    best = {}   # gvg effect id -> representative tactics (highest rarity)
+    for t in tactics:
+        gid = t.get("gvgTacticsEffectMstId")
+        eff = effects.get(gid)
+        if not eff:
+            continue
+        if eff.get("sp", 0) != 0 and eff.get("name") in free_names:
+            continue   # MP version that has a fully-equivalent no-MP twin -> skip
+        if gid not in best or t["rarity"] > best[gid]["rarity"]:
+            best[gid] = t
+    groups = {"my_attr": [], "my_rate": [], "my_eff": [], "en_shield": [], "en_rate": [], "en_eff": []}
+    for gid, t in best.items():
+        eff = effects[gid]
+        cat = gtl._effect_category(eff)
+        info = sc.tactics_effect_info(eff)
+        opt = {"uid": t["uniqueId"], "rar": t["rarity"], "name": eff.get("name", ""), "info": info}
+        if cat == "attr":
+            groups["my_attr"].append(opt)
+        elif cat == "eff":
+            groups["en_eff" if info["down"] > 0 else "my_eff"].append(opt)
+        elif cat == "shield":
+            groups["en_shield"].append(opt)
+        elif cat == "rate":
+            if info["rateUp"] > 0:
+                groups["my_rate"].append(opt)
+            if info["rateDown"] > 0:
+                groups["en_rate"].append(opt)
+    for arr in groups.values():
+        arr.sort(key=lambda o: (o["info"].get("tAttr", 0), o["name"]))
+    return groups
 
 
 def render_html(units):
@@ -417,6 +486,8 @@ def render_html(units):
     out = out.replace("__OTH_UNITS__", oth_html)
     out = out.replace("__LEG_TOTAL__", str(len(legendary)))
     out = out.replace("__OTH_TOTAL__", str(len(others)))
+    out = out.replace("__PME_TACTICS__",
+                      json.dumps(build_tactics_options(), separators=(",", ":"), ensure_ascii=False))
     return out
 
 
@@ -556,6 +627,52 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   #pcount { color:#444; }
 
+  /* 牌効 calculator: settings panel sits between the deck slots and the stats; results show under each deck card */
+  #pmeToggle.active { background:#5b6b8c; color:#fff; border-color:#5b6b8c; }
+  #pmePanel { display:none; }
+  .deckpane.pme-on #pmePanel { display:block; }
+  .pme { margin:6px 0 12px; border-top:2px solid #9aa3b8; padding:8px 0 10px; }
+  .pme h3 { font-size:14px; margin:2px 0 8px; color:#333; border-bottom:1px solid #c5ccda; padding-bottom:4px; }
+  .pme h4 { font-size:12px; margin:0 0 4px; color:#444; }
+  .pme-grid { display:flex; flex-direction:column; gap:6px; }
+  .pme-blk { display:flex; align-items:flex-start; gap:6px; flex-wrap:wrap; }
+  .pme-blk > b { flex:0 0 60px; color:#555; font-size:12px; padding-top:3px; }
+  .pme-attrs { display:flex; flex-wrap:wrap; gap:4px 8px; align-items:center; }
+  .pme-attrs label { display:inline-flex; align-items:center; gap:2px; color:#333; font-size:12px; }
+  .pme-attrs input[type=number] { width:46px; padding:2px 4px; border:1px solid #9aa3b8; border-radius:5px; font-size:12px; }
+  .pme-attrs select { padding:2px 4px; border:1px solid #9aa3b8; border-radius:5px; font-size:12px; }
+  .pme-tac { display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; }
+  .pme-tcol { flex:1 1 220px; min-width:0; }
+  .pme-tg { margin-bottom:6px; }
+  .pme-tg > span { display:block; font-size:11px; color:#5b6b8c; font-weight:600; margin-bottom:2px; }
+  /* mini tactics list = clickable framed icons (same look as the tactics page) */
+  .taclist { display:flex; flex-wrap:wrap; gap:6px; max-height:170px; overflow:auto;
+             border:1px solid #c5ccda; border-radius:6px; padding:5px; background:#fff; }
+  .taclist .muted { color:#aaa; font-size:11px; }
+  .tac-ic { width:62px; height:62px; padding:0; border:0; background:transparent; cursor:pointer;
+            position:relative; opacity:.45; transition:opacity .15s; }
+  .tac-ic:hover { opacity:.8; }
+  .tac-ic.on { opacity:1; }
+  .tac-ic.on::after { content:''; position:absolute; inset:-2px; border:2px solid #e8902a;
+                      border-radius:9px; pointer-events:none; }
+  .tcimg { position:relative; display:block; width:62px; height:62px; }
+  .tcimg .bg, .tcimg .art { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:6px; }
+  .tcimg .frame { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .tcimg .mark { position:absolute; top:-2px; right:-3px; max-height:38%; width:auto; height:auto;
+                 pointer-events:none; filter:drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
+  /* per-effect 牌効 chips (under each deck card) */
+  .pme-eff { display:inline-block; font-size:10px; margin:1px 2px 0 0; padding:0 3px; border-radius:3px;
+             font-variant-numeric:tabular-nums; line-height:1.5; }
+  .pme-eff b { font-weight:700; }
+  .k-dmg { background:#ffe1e1; color:#a01f1f; }
+  .k-heal { background:#e1f3e6; color:#1f7a3a; }
+  .k-buff { background:#e3ecfb; color:#26508a; }
+  .k-debuff { background:#efe1f7; color:#6a2a8a; }
+  /* deck slot cell = the square slot + its 牌効 results below (only while the calculator is on) */
+  .slotcell { display:flex; flex-direction:column; align-items:stretch; }
+  .slot-pme { display:none; margin-top:2px; }
+  .deckpane.pme-on .slot-pme { display:block; }
+
   /* Global watermark: fixed, covers the whole viewport, top layer, very low opacity (uniqueId 20000216 full art); always visible while scrolling and never blocks interaction */
   .watermark { position:fixed; inset:0; z-index:9999; pointer-events:none; }
   .watermark img { width:100%; height:100%; object-fit:cover; opacity:.1; user-select:none; }
@@ -600,6 +717,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   __DD_GA__
   <label class="chk"><input type="checkbox" id="deckOnly"> デッキ内のみ</label>
   <button class="btn" id="clearFilter" type="button">筛选クリア</button>
+  <button class="btn" id="pmeToggle" type="button">牌効 OFF</button>
   <span id="pcount"></span>
 </header>
 
@@ -619,6 +737,59 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="deck-group">
       <h3>メイン <span id="othCount">0</span>/20</h3>
       <div id="othSlots" class="slots"><span class="empty-hint">— なし —</span></div>
+    </div>
+
+    <div class="pme" id="pmePanel">
+      <h3>牌効計算 設定</h3>
+      <div class="pme-grid">
+        <div class="pme-blk"><b>CHARM%</b>
+          <div class="pme-attrs">
+            <label>火<input type="number" id="charm1" value="0" step="1"></label>
+            <label>水<input type="number" id="charm2" value="0" step="1"></label>
+            <label>風<input type="number" id="charm3" value="0" step="1"></label>
+            <label>光<input type="number" id="charm4" value="0" step="1"></label>
+            <label>闇<input type="number" id="charm5" value="0" step="1"></label>
+          </div>
+        </div>
+        <div class="pme-blk"><b>ADX</b>
+          <div class="pme-attrs" id="adxRow"></div>
+        </div>
+        <div class="pme-blk"><b>テーマ</b>
+          <div class="pme-attrs">
+            <label class="chk">火<input type="checkbox" id="theme1"></label>
+            <label class="chk">水<input type="checkbox" id="theme2"></label>
+            <label class="chk">風<input type="checkbox" id="theme3"></label>
+            <label class="chk">光<input type="checkbox" id="theme4"></label>
+            <label class="chk">闇<input type="checkbox" id="theme5"></label>
+          </div>
+        </div>
+        <div class="pme-blk"><b>得意</b>
+          <div class="pme-attrs"><label><select id="costJob"></select></label></div>
+        </div>
+        <div class="pme-blk"><b>スタック</b>
+          <div class="pme-attrs">
+            <label class="chk"><input type="checkbox" id="sMt"> Mt(攻20%)</label>
+            <label class="chk"><input type="checkbox" id="sAn"> An(支妨30%)</label>
+            <label class="chk"><input type="checkbox" id="sEt"> Et(回30%)</label>
+          </div>
+        </div>
+        <div class="pme-blk"><b>特効</b>
+          <div class="pme-attrs"><label class="chk"><input type="checkbox" id="ehct"> EH/CT </label></div>
+        </div>
+      </div>
+
+      <div class="pme-tac">
+        <div class="pme-tcol"><h4>味方 発動中オーダー</h4>
+          <div class="pme-tg"><span>属性</span><div class="taclist" id="tacMyAttr"></div></div>
+          <div class="pme-tg"><span>発動率↑</span><div class="taclist" id="tacMyRate"></div></div>
+          <div class="pme-tg"><span>特効</span><div class="taclist" id="tacMyEff"></div></div>
+        </div>
+        <div class="pme-tcol"><h4>相手 発動中オーダー</h4>
+          <div class="pme-tg"><span>盾</span><div class="taclist" id="tacEnShield"></div></div>
+          <div class="pme-tg"><span>発動率↓</span><div class="taclist" id="tacEnRate"></div></div>
+          <div class="pme-tg"><span>特効</span><div class="taclist" id="tacEnEff"></div></div>
+        </div>
+      </div>
     </div>
 
     <div class="stats" id="stats">
@@ -682,7 +853,8 @@ __OTH_UNITS__
              tgt:d.tgt||'', sk1:d.sk1?d.sk1.split(' '):[], sk2:d.sk2?d.sk2.split(' '):[], sk3:d.sk3?d.sk3.split(' '):[],
              sc:d.sc?d.sc.split(' ').map(Number):[], heal:d.heal==='1',
              fg:d.fg?d.fg.split(' '):[], ga:d.ga?d.ga.split(' '):[],
-             mt:+d.mt, an:+d.an, ba:+d.ba, et:+d.et, lv:d.lv?d.lv.split(' '):[], el:el };
+             mt:+d.mt, an:+d.an, ba:+d.ba, et:+d.et, lv:d.lv?d.lv.split(' '):[],
+             calc:d.calc?JSON.parse(d.calc):null, el:el };
   }
   units.forEach(function(el){ unitByKey[el.dataset.uid+'.'+el.dataset.ct] = el; });
   // twdb id -> unit(s) (awakenable cards have two entries sharing an id, hence an array)
@@ -730,6 +902,7 @@ __OTH_UNITS__
     role=r;
     document.getElementById('roleF').classList.toggle('on', r==='F');
     document.getElementById('roleB').classList.toggle('on', r==='B');
+    rebuildCostJob();
     clearSlots(); applyRoleToTypeFilter(); renderDeck(); applyFilter();
   }
   document.getElementById('roleF').addEventListener('click', function(){ setRole('F'); });
@@ -838,7 +1011,8 @@ __OTH_UNITS__
     for(var i=0;i<arr.length;i++){
       var c=arr[i];
       if(c){
-        h+='<div class="slot filled" draggable="true" data-grp="'+grp+'" data-idx="'+i+'" data-uid="'+c.uid+'" '
+        h+='<div class="slotcell">'
+          +'<div class="slot filled" draggable="true" data-grp="'+grp+'" data-idx="'+i+'" data-uid="'+c.uid+'" '
           +'title="'+escAttr(c.name)+' ('+TYPE_LABEL[c.ct]+')">'
           +'<span class="cardimg">'
           +'<img class="art" loading="lazy" src="'+iconUrl(c.uid)+'" alt="" onerror="this.style.visibility=\\'hidden\\'">'
@@ -847,10 +1021,11 @@ __OTH_UNITS__
           +'<img class="mark" src="'+c.mark+'" alt="">'
           +overlayHtml(c)
           +'</span>'
-          +'<span class="x" title="外す">×</span></div>';
+          +'<span class="x" title="外す">×</span></div>'
+          +'<div class="slot-pme" data-uid="'+c.uid+'"></div></div>';
       } else {
-        h+='<div class="slot empty" data-grp="'+grp+'" data-idx="'+i+'">'
-          +'<img class="blank" src="assets/Blank.png" alt=""></div>';
+        h+='<div class="slotcell"><div class="slot empty" data-grp="'+grp+'" data-idx="'+i+'">'
+          +'<img class="blank" src="assets/Blank.png" alt=""></div></div>';
       }
     }
     container.innerHTML=h;
@@ -868,6 +1043,7 @@ __OTH_UNITS__
       var btn=units[i].querySelector('.u-add'); if(btn) btn.textContent=inDeck?'✓ 編成済':'＋ 追加';
     }
     renderStats(); syncCode();
+    if(pmeOn()) recalcAll();
     if(document.getElementById('deckOnly').checked) applyFilter();
   }
 
@@ -1037,6 +1213,7 @@ __OTH_UNITS__
     role=r; clearSlots();
     document.getElementById('roleF').classList.toggle('on', r==='F');
     document.getElementById('roleB').classList.toggle('on', r==='B');
+    rebuildCostJob();
     applyRoleToTypeFilter();
     var miss=0;
     function place(groupStr){
@@ -1066,6 +1243,158 @@ __OTH_UNITS__
   // ---------- Utilities ----------
   function iconUrl(uid){ return 'assets/remote/Image/CardIcon/S/CardIconS0'+uid+'.png'; }
   function escAttr(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+  // ---------- 牌効 calculator ----------
+  // Per-effect conversion rate = product of ~13 regions (value region fixed at 1). Static per-card
+  // data comes from data-calc (skill_calc.py); the deck-wide UP region + all user settings are applied here.
+  var PME_TACTICS = __PME_TACTICS__;
+  var deckpane = document.querySelector('.deckpane');
+  function pmeOn(){ return deckpane.classList.contains('pme-on'); }
+  function pesc(s){ return (s+'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // adx selectors (theme turns the 1.05-based options into 1.055-based)
+  var ADX_LABEL=['0.95','1','1.05','1.05×0.95'];
+  (function(){
+    var row=document.getElementById('adxRow'), names=['火','水','風','光','闇'], h='';
+    for(var a=1;a<=5;a++){
+      h+='<label>'+names[a-1]+'<select id="adx'+a+'">';
+      for(var c=0;c<4;c++) h+='<option value="'+c+'"'+(c===1?' selected':'')+'>'+ADX_LABEL[c]+'</option>';
+      h+='</select></label>';
+    }
+    row.innerHTML=h;
+  })();
+
+  // costume main job — only the options for the current role (前衛 1-4 / 後衛 5-7)
+  function rebuildCostJob(){
+    var sel=document.getElementById('costJob');
+    var opts = role==='F' ? [[1,'通常単体'],[2,'通常範囲'],[3,'特殊単体'],[4,'特殊範囲']]
+                          : [[5,'支援'],[6,'妨害'],[7,'回復']];
+    var h='<option value="0">なし</option>';
+    opts.forEach(function(o){ h+='<option value="'+o[0]+'">'+o[1]+'</option>'; });
+    sel.innerHTML=h;
+  }
+  rebuildCostJob();
+
+  // active-tactics pickers = a mini tactics list (clickable framed icons, like the tactics page)
+  function tacIconUrl(uid){ return 'assets/remote/Image/TacticsIcon/S/TacticsIconS'+('00'+uid).slice(-3)+'.png'; }
+  function tacFrame(r){ return 'assets/Sprite/IconRarity0'+(r===4?4:(r===5?5:6))+'LImage.png'; }
+  function buildTacIcons(elId, arr){
+    var box=document.getElementById(elId), h='';
+    for(var i=0;i<arr.length;i++){
+      var o=arr[i];
+      h+='<button type="button" class="tac-ic" data-i="'+i+'" title="'+escAttr(o.name)+'">'
+        +'<span class="tcimg">'
+        +'<img class="bg" src="assets/Blank.png" alt="">'
+        +'<img class="art" src="'+tacIconUrl(o.uid)+'" alt="" loading="lazy">'
+        +'<img class="frame" src="'+tacFrame(o.rar)+'" alt="">'
+        +'<img class="mark" src="assets/markers/mk_tactics.png" alt="">'
+        +'</span></button>';
+    }
+    box.innerHTML = h || '<span class="muted">— なし —</span>';
+  }
+  buildTacIcons('tacMyAttr', PME_TACTICS.my_attr);
+  buildTacIcons('tacMyRate', PME_TACTICS.my_rate);
+  buildTacIcons('tacMyEff', PME_TACTICS.my_eff);
+  buildTacIcons('tacEnShield', PME_TACTICS.en_shield);
+  buildTacIcons('tacEnRate', PME_TACTICS.en_rate);
+  buildTacIcons('tacEnEff', PME_TACTICS.en_eff);
+  function selTac(elId, arr){
+    var out=[], bs=document.querySelectorAll('#'+elId+' .tac-ic.on');
+    for(var i=0;i<bs.length;i++) out.push(arr[+bs[i].dataset.i].info);
+    return out;
+  }
+
+  function pnum(id){ var v=parseFloat(document.getElementById(id).value); return isNaN(v)?0:v; }
+  function pchk(id){ return document.getElementById(id).checked; }
+
+  var PBASE=[0.15,0.225,0.30];   // passive activation rate by "+" count (0/1/2)
+  function recalcAll(){
+    if(!pmeOn()) return;
+    var deck=deckCards(), a;
+    var charm={},adx={},theme={};
+    for(a=1;a<=5;a++){ charm[a]=pnum('charm'+a); adx[a]=+document.getElementById('adx'+a).value; theme[a]=pchk('theme'+a); }
+    var costJob=+document.getElementById('costJob').value;
+    var sMt=pchk('sMt'), sAn=pchk('sAn'), sEt=pchk('sEt'), ehct=pchk('ehct');
+    var myAttr=selTac('tacMyAttr',PME_TACTICS.my_attr), myRate=selTac('tacMyRate',PME_TACTICS.my_rate),
+        myEff=selTac('tacMyEff',PME_TACTICS.my_eff), enShield=selTac('tacEnShield',PME_TACTICS.en_shield),
+        enRate=selTac('tacEnRate',PME_TACTICS.en_rate), enEff=selTac('tacEnEff',PME_TACTICS.en_eff);
+
+    // tactics aggregates (same-effect values additive per 11.1; activation rate multiplicative)
+    // 特効 matches by card TYPE (支援/妨害効果 = the skill effect of 支援/妨害 cards), keyed by cardType
+    var attrBoost={1:0,2:0,3:0,4:0,5:0}, shieldDown={1:0,2:0,3:0,4:0,5:0};
+    var effUp={}, effDown={};   // keyed by targetCardType
+    var disadv=0, dmgRedP=0, dmgRedM=0, myRateUp=0, enRateDown=0, activeTypes={};
+    function addAttr(at, v){ if(at){ if(theme[at]) v*=1.1; attrBoost[at]+=v; } }   // dual attr: both attributes boosted
+    myAttr.forEach(function(t){ addAttr(t.tAttr, t.up/100); addAttr(t.tAttr2, t.up2/100); activeTypes[t.type]=1; });
+    myRate.forEach(function(t){ myRateUp+=t.rateUp/100; activeTypes[t.type]=1; });
+    myEff.forEach(function(t){ if(t.tCard) effUp[t.tCard]=(effUp[t.tCard]||0)+t.up/100; if(t.disadv) disadv+=t.disadv/100; activeTypes[t.type]=1; });
+    enShield.forEach(function(t){ if(t.tAttr) shieldDown[t.tAttr]+=t.down/100; if(t.tAttr2) shieldDown[t.tAttr2]+=(t.down2||t.down)/100;
+                                  dmgRedP+=(t.dmgRedP||0)/100; dmgRedM+=(t.dmgRedM||0)/100; });
+    enRate.forEach(function(t){ enRateDown+=t.rateDown/100; });
+    enEff.forEach(function(t){ if(t.tCard) effDown[t.tCard]=(effDown[t.tCard]||0)+t.down/100; });
+
+    // deck-aggregate UP pools (every deck card's passive + Legendary)
+    var passPool=[], legPool=[];
+    deck.forEach(function(c){ if(!c.calc) return;
+      (c.calc.pu||[]).forEach(function(p){ passPool.push({k:p.k,coeff:p.c,host:c.calc.a,plus:c.calc.pp||0}); });
+      (c.calc.lu||[]).forEach(function(l){ legPool.push(l); });
+    });
+    function passUP(kind){
+      var s=0;
+      passPool.forEach(function(p){ if(p.k!==kind) return;
+        var r=(PBASE[p.plus]||0.15)+(theme[p.host]?0.02:0);
+        r=r*(1+myRateUp)*(1-enRateDown); if(r<0)r=0; if(r>1)r=1;
+        s+=p.coeff*1.5*r; });
+      return s;
+    }
+    function legUP(at,kind,atk){ var s=0; legPool.forEach(function(l){ if(l.a===at&&l.k===kind&&(l.t===0||l.t===atk)) s+=l.p; }); return s; }
+    function adxVal(at){ var base=theme[at]?[0.95,1,1.055,1.055*0.95]:[0.95,1,1.05,1.05*0.95]; return base[adx[at]]; }
+
+    // clear previous results, then write each card's per-effect rates under its slot
+    var allp=document.querySelectorAll('.slot-pme');
+    for(var i=0;i<allp.length;i++) allp[i].innerHTML='';
+    deck.forEach(function(c){ if(!c.calc||!c.calc.e.length) return;
+      var at=c.calc.a, ct=c.calc.c;
+      var trig=(c.calc.ut||[]).some(function(t){ return activeTypes[t]; });
+      var cos=(costJob&&costJob===ct)?1.15:1;
+      var charmM=1+(charm[at]||0)/100, adxM=adxVal(at), themeM=theme[at]?1.1:1;
+      var attrB=attrBoost[at]||0, shB=shieldDown[at]||0;
+      var ehMul=ehct?((c.calc.eh>0?c.calc.eh:1)*(c.calc.ct>0?c.calc.ct:1)):1;
+      var parts='';
+      c.calc.e.forEach(function(e){
+        var mag=(e.m+(trig?(c.calc.am||0):0))*(1+(c.calc.tm||0));
+        var stack=e.k==='dmg'?(sMt?1.2:1):(e.k==='heal'?(sEt?1.3:1):(sAn?1.3:1));
+        var up=1+passUP(e.k)+legUP(at,e.k,e.t);
+        // オーダー加成: attribute boost (all kinds) + 特効 by card type − 相手 特効 by card type;
+        // attribute shield skips 回復; damage shield + 劣勢 only hit damage
+        var cmd=1+attrB+(effUp[ct]||0)-(effDown[ct]||0);
+        if(e.k!=='heal') cmd-=shB;
+        if(e.k==='dmg') cmd-=(e.t===2?dmgRedM:dmgRedP), cmd+=disadv;
+        var rate=e.g*mag*1.5*cos*1.1*stack*charmM*adxM*themeM*up*ehMul*cmd*e.n;
+        parts+='<span class="pme-eff k-'+e.k+'" title="'+escAttr(e.l)+'">'+pesc(e.l)+' <b>'+rate.toFixed(3)+'</b></span>';
+      });
+      var box=document.querySelector('.slot-pme[data-uid="'+c.uid+'"]');
+      if(box) box.innerHTML=parts;
+    });
+  }
+
+  document.getElementById('pmeToggle').addEventListener('click', function(){
+    var on=!deckpane.classList.contains('pme-on');
+    deckpane.classList.toggle('pme-on', on);
+    this.textContent='牌効 '+(on?'ON':'OFF');
+    this.classList.toggle('active', on);
+    if(on) recalcAll();
+  });
+  document.getElementById('pmePanel').addEventListener('change', recalcAll);
+  document.getElementById('pmePanel').addEventListener('input', function(e){ if(e.target.type==='number') recalcAll(); });
+  document.getElementById('pmePanel').addEventListener('click', function(e){
+    var b=e.target.closest('.tac-ic'); if(!b) return;
+    // only one active tactics per side (column), regardless of type
+    var col=b.closest('.pme-tcol'), wasOn=b.classList.contains('on');
+    if(col){ var ons=col.querySelectorAll('.tac-ic.on'); for(var i=0;i<ons.length;i++) ons[i].classList.remove('on'); }
+    if(!wasOn) b.classList.add('on');
+    recalcAll();
+  });
 
   // ---------- Init ----------
   applyRoleToTypeFilter();

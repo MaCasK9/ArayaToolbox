@@ -142,13 +142,26 @@ def compute_stats(max_obj, fields, add_obj, lbb_entry, include_awk):
 # ---------------------------------------------------------------------------
 # Skill resolution
 # ---------------------------------------------------------------------------
+def _parse_pt(raw):
+    """Parse a skill's parameterText JSON blob into a dict (empty dict on failure)."""
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}
+
+
 def resolve_skill(skill, sid):
     if not sid:
         return None
     s = skill.get(sid)
     if not s:
-        return {"name": "（不明: %s）" % sid, "desc": ""}
-    return {"name": s.get("name", ""), "desc": s.get("description", "")}
+        return {"name": "（不明: %s）" % sid, "desc": "", "id": sid, "pt": {}}
+    # "id" + parsed "pt" (parameterText) are carried for the deck builder's 牌効 calculator;
+    # the list/deck rendering only ever touches name/desc, so the extra keys are harmless.
+    return {"name": s.get("name", ""), "desc": s.get("description", ""),
+            "id": sid, "pt": _parse_pt(s.get("parameterText"))}
 
 
 def resolve_legendary(legendary, gid):

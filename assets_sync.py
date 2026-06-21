@@ -38,11 +38,13 @@ LOCAL_DIR = os.path.join(SCRIPT_DIR, "assets", "remote")
 STATE_FILE = os.path.join(LOCAL_DIR, ".sync_state.json")
 
 # Remote assets this toolset uses (paths relative to the site root)
-CARD_ICON_REL = "Image/CardIcon/S/CardIconS0%s.png"   # % uniqueId
+CARD_ICON_REL = "Image/CardIcon/S/CardIconS0%s.png"     # % uniqueId (card)
+TACTICS_ICON_REL = "Image/TacticsIcon/S/TacticsIconS%03d.png"  # % uniqueId (tactics, zero-padded to 3 digits)
 WATERMARK_REL = "Image/Card/Card020000216.jpg"
 
 # Local relative paths referenced from the HTML (relative to the html file's dir)
 CARD_ICON_LOCAL = "assets/remote/Image/CardIcon/S/CardIconS0{uid}.png"
+TACTICS_ICON_LOCAL = "assets/remote/Image/TacticsIcon/S/TacticsIconS{uid:03d}.png"
 WATERMARK_LOCAL = "assets/remote/" + WATERMARK_REL
 
 RE_UPDATE = re.compile(r"\d{4}-\d{2}-\d{2}-\d{6}_file_update\.txt")
@@ -148,17 +150,18 @@ def _download_many(rels, overwrite, label, workers=8):
 # ---------------------------------------------------------------------------
 # Main flow
 # ---------------------------------------------------------------------------
-def needed_assets(unique_ids):
-    """Set of remote-relative paths this toolset needs."""
+def needed_assets(unique_ids, tactics_ids=()):
+    """Set of remote-relative paths this toolset needs (card icons + tactics icons + watermark)."""
     rels = set(CARD_ICON_REL % u for u in unique_ids)
+    rels.update(TACTICS_ICON_REL % u for u in tactics_ids)
     rels.add(WATERMARK_REL)
     return rels
 
 
-def sync(unique_ids):
-    """Sync assets. unique_ids: iterable of uniqueId. Returns True if the update
-    check ran online."""
-    needed = needed_assets(unique_ids)
+def sync(unique_ids, tactics_ids=()):
+    """Sync assets. unique_ids: iterable of card uniqueId; tactics_ids: iterable of
+    tactics uniqueId. Returns True if the update check ran online."""
+    needed = needed_assets(unique_ids, tactics_ids)
     state = _load_state()
     baseline = state.get("baseline")
 
@@ -223,5 +226,10 @@ def _all_unique_ids():
     return {e["uniqueId"] for e in entries}
 
 
+def _all_tactics_ids():
+    from generate_tactics_list import load_tactics
+    return {x["uniqueId"] for x in load_tactics()}
+
+
 if __name__ == "__main__":
-    sync(_all_unique_ids())
+    sync(_all_unique_ids(), _all_tactics_ids())

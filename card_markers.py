@@ -115,3 +115,24 @@ def marker_for(entry, context):
 
 def frame_rel(is_ultimate):
     return "assets/Sprite/IconRarity0%dLImage.png" % (8 if is_ultimate else 6)
+
+
+# ---------------------------------------------------------------------------
+# Tactics (commands) marker / frame
+# ---------------------------------------------------------------------------
+def marker_tactics():
+    """Top-right marker for tactics: the tactics ring (BattleIconTactic, 44x44) with the
+    common tactics icon (CommonTacticsCardIcon001, 25x25) centered. One marker for all
+    tactics (no per-attribute/category variation, unlike cards)."""
+    def b():
+        base = _img("BattleIconTactic.png")
+        _paste_center(base, "CommonTacticsCardIcon001.png", (base.width // 2, base.height // 2))
+        return base
+    return _ensure("mk_tactics.png", b)
+
+
+def tactics_frame_rel(rarity):
+    """Rarity frame for tactics. Rarity 4/5 use the dedicated new frames; anything else
+    (6) falls back to the rarity-6 frame shared with cards."""
+    r = rarity if rarity in (4, 5) else 6
+    return "assets/Sprite/IconRarity0%dLImage.png" % r
