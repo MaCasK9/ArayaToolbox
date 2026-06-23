@@ -14,6 +14,7 @@ It first syncs assets (full download the first time, deltas only afterwards) so 
 pages work offline.
 """
 
+import masterdata_sync
 import assets_sync
 import generate_card_list
 import generate_deck_builder
@@ -21,7 +22,10 @@ import generate_tactics_list
 
 
 def main():
-    print("=== sync assets ===")
+    print("=== sync masterdata ===")
+    masterdata_sync.sync()
+
+    print("\n=== sync assets ===")
     data = generate_card_list.build_lookups()
     entries = generate_card_list.build_entries(*data)
     tactics_ids = {x["uniqueId"] for x in generate_tactics_list.load_tactics()}

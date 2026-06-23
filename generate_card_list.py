@@ -25,13 +25,14 @@ import re
 import collections
 
 import card_markers
+import masterdata_sync
 
 # ---------------------------------------------------------------------------
 # Paths (resolved relative to this script, independent of the cwd)
 # ---------------------------------------------------------------------------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(SCRIPT_DIR)                       # workspace root
-MST = os.path.join(ROOT, "A.RA.YA", "MasterdataBase")
+MST = masterdata_sync.PRIMARY_DIR
 OUT = os.path.join(SCRIPT_DIR, "card_list.html")
 
 # Card icons now come from the local mirror (downloaded into assets/remote/ by assets_sync.py; offline-capable)
@@ -67,7 +68,7 @@ ULT_TYPE_FIELDS = {
 # Data loading
 # ---------------------------------------------------------------------------
 def load_mst(filename):
-    path = os.path.join(MST, filename)
+    path = masterdata_sync.resolve(filename)
     with open(path, encoding="utf-8") as f:
         return json.load(f)["payload"]["mstList"]
 
