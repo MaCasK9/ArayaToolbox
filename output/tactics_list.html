@@ -104,12 +104,12 @@
 <header>
   <h1>オーダーリスト</h1>
   <span><label>検索</label><input id="q" type="text" placeholder="名前で検索"></span>
-  <span class="dd"><button class="ddbtn" type="button" data-dd="rarity" data-label="レアリティ">レアリティ ▾</button><div class="ddpanel" data-ddp="rarity"><label><input type="checkbox" data-f="rarity" value="4"> ★4</label><label><input type="checkbox" data-f="rarity" value="5"> ★5</label><label><input type="checkbox" data-f="rarity" value="6"> ★6</label></div></span>
-  <span class="dd"><button class="ddbtn" type="button" data-dd="cat" data-label="効果類別">効果類別 ▾</button><div class="ddpanel" data-ddp="cat"><label><input type="checkbox" data-f="cat" value="attr"> 属性</label><label><input type="checkbox" data-f="cat" value="shield"> 盾</label><label><input type="checkbox" data-f="cat" value="rate"> 発動率</label><label><input type="checkbox" data-f="cat" value="buff"> buff</label><label><input type="checkbox" data-f="cat" value="eff"> 特定効果</label><label><input type="checkbox" data-f="cat" value="mp"> MP</label><label><input type="checkbox" data-f="cat" value="other"> その他</label></div></span>
+  <span class="dd"><button class="ddbtn" type="button" data-dd="rarity" data-label="レア度">レア度 ▾</button><div class="ddpanel" data-ddp="rarity"><label><input type="checkbox" data-f="rarity" value="4"> ★4</label><label><input type="checkbox" data-f="rarity" value="5"> ★5</label><label><input type="checkbox" data-f="rarity" value="6"> ★6</label></div></span>
+  <span class="dd"><button class="ddbtn" type="button" data-dd="cat" data-label="カテゴリー">カテゴリー ▾</button><div class="ddpanel" data-ddp="cat"><label><input type="checkbox" data-f="cat" value="attr"> 属性</label><label><input type="checkbox" data-f="cat" value="shield"> 盾</label><label><input type="checkbox" data-f="cat" value="rate"> 発動率</label><label><input type="checkbox" data-f="cat" value="buff"> バフ</label><label><input type="checkbox" data-f="cat" value="eff"> 特定効果</label><label><input type="checkbox" data-f="cat" value="mp"> MP</label><label><input type="checkbox" data-f="cat" value="other"> その他</label></div></span>
   <span class="dd"><button class="ddbtn" type="button" data-dd="mp" data-label="MP消費">MP消費 ▾</button><div class="ddpanel" data-ddp="mp"><label><input type="checkbox" data-f="mp" value="1"> 消費あり</label><label><input type="checkbox" data-f="mp" value="0"> 消費なし</label></div></span>
   <span class="dd">
     <button class="ddbtn" type="button" data-dd="cols" data-label="表示列">表示列 ▾</button>
-    <div class="ddpanel" data-ddp="cols"><label><input type="checkbox" data-col="icon" checked> 図</label><label><input type="checkbox" data-col="name" checked> 名称</label><label><input type="checkbox" data-col="pa" checked> 通攻</label><label><input type="checkbox" data-col="ma" checked> 特攻</label><label><input type="checkbox" data-col="pd" checked> 通防</label><label><input type="checkbox" data-col="md" checked> 特防</label><label><input type="checkbox" data-col="power" checked> 戦闘力</label><label><input type="checkbox" data-col="papd"> 通攻+通防</label><label><input type="checkbox" data-col="mamd"> 特攻+特防</label><label><input type="checkbox" data-col="pama"> 通攻+特攻</label><label><input type="checkbox" data-col="pdmd"> 通防+特防</label><label><input type="checkbox" data-col="mp" checked> 消費MP</label><label><input type="checkbox" data-col="quest" checked> 対HUGE技能</label><label><input type="checkbox" data-col="gvg" checked> GVG技能</label></div>
+    <div class="ddpanel" data-ddp="cols"><label><input type="checkbox" data-col="icon" checked> 図</label><label><input type="checkbox" data-col="name" checked> オーダー名</label><label><input type="checkbox" data-col="pa" checked> 通攻</label><label><input type="checkbox" data-col="ma" checked> 特攻</label><label><input type="checkbox" data-col="pd" checked> 通防</label><label><input type="checkbox" data-col="md" checked> 特防</label><label><input type="checkbox" data-col="power" checked> 戦闘力</label><label><input type="checkbox" data-col="papd"> 通攻+通防</label><label><input type="checkbox" data-col="mamd"> 特攻+特防</label><label><input type="checkbox" data-col="pama"> 通攻+特攻</label><label><input type="checkbox" data-col="pdmd"> 通防+特防</label><label><input type="checkbox" data-col="mp" checked> 消費MP</label><label><input type="checkbox" data-col="quest" checked> 対HUGEスキル</label><label><input type="checkbox" data-col="gvg" checked> GVGスキル</label></div>
   </span>
   <button id="clear" type="button">クリア</button>
   <span id="count"></span>
@@ -118,7 +118,7 @@
 <thead>
 <tr>
   <th class="sortable col-icon" data-sort="order" data-get="num">図</th>
-  <th class="sortable col-name" data-sort="name" data-get="name">名称</th>
+  <th class="sortable col-name" data-sort="name" data-get="name">オーダー名</th>
   <th class="sortable num col-pa" data-sort="pa" data-get="num">通攻</th>
   <th class="sortable num col-ma" data-sort="ma" data-get="num">特攻</th>
   <th class="sortable num col-pd" data-sort="pd" data-get="num">通防</th>
@@ -129,8 +129,8 @@
   <th class="sortable num col-pama" data-sort="pama" data-get="num">通攻+特攻</th>
   <th class="sortable num col-pdmd" data-sort="pdmd" data-get="num">通防+特防</th>
   <th class="sortable num col-mp" data-sort="sp" data-get="num">消費MP</th>
-  <th class="sortable col-quest" data-sort="quest" data-get="cell"><img class="skh" src="../data/assets/Skill1.png" alt="">対HUGE技能</th>
-  <th class="sortable col-gvg" data-sort="gvg" data-get="cell"><img class="skh" src="../data/assets/Skill2.png" alt="">GVG技能</th>
+  <th class="sortable col-quest" data-sort="quest" data-get="cell"><img class="skh" src="../data/assets/Skill1.png" alt="">対HUGEスキル</th>
+  <th class="sortable col-gvg" data-sort="gvg" data-get="cell"><img class="skh" src="../data/assets/Skill2.png" alt="">GVGスキル</th>
 </tr>
 </thead>
 <tbody id="rows">
