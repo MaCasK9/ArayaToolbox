@@ -729,6 +729,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .k-heal { background:#e1f3e6; color:#1f7a3a; }
   .k-buff { background:#e3ecfb; color:#26508a; }
   .k-debuff { background:#efe1f7; color:#6a2a8a; }
+  /* grand total of all deck cards' effect amounts (bottom of the simulator panel) */
+  .pme-total { margin-top:10px; padding-top:8px; border-top:1px dashed #b9c0d0; }
+  .pme-total .pt-h { font-size:12px; font-weight:700; color:#333; margin-bottom:4px; }
+  .pme-total .pt-row { display:flex; flex-wrap:wrap; gap:4px 6px; }
+  .pme-total .pt-k { display:inline-block; font-size:12px; padding:1px 6px; border-radius:3px;
+                     font-variant-numeric:tabular-nums; }
+  .pme-total .pt-k b { font-weight:700; }
+  .pme-total .pt-grand { margin-top:5px; font-size:13px; color:#222; font-variant-numeric:tabular-nums; }
+  .pme-total .pt-grand b { font-weight:700; font-size:14px; }
   /* deck slot cell = the square slot + its 牌効 results below (only while the calculator is on) */
   .slotcell { display:flex; flex-direction:column; align-items:stretch; }
   .slot-pme { display:none; margin-top:2px; }
@@ -874,6 +883,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           <div class="pme-tg"><span>__DBT_eff__</span><div class="taclist" id="tacEnEff"></div></div>
         </div>
       </div>
+      <div class="pme-total" id="pmeTotal"></div>
     </div>
 
     <div class="stats" id="stats">
@@ -1461,6 +1471,7 @@ __OTH_UNITS__
     BREAKDOWN={};
     var allp=document.querySelectorAll('.slot-pme');
     for(var i=0;i<allp.length;i++) allp[i].innerHTML='';
+    var totK={dmg:0,heal:0,buff:0,debuff:0}, totAll=0, anyE=false;
     deck.forEach(function(c){ if(!c.calc||!c.calc.e.length) return;
       var at=c.calc.a, ct=c.calc.c;
       var trig=(c.calc.ut||[]).some(function(t){ return activeTypes[t]; });
@@ -1482,6 +1493,7 @@ __OTH_UNITS__
         var cmd=1+cmdAttr+cmdEffUp-cmdEffDown-cmdShB-cmdDmgRed+cmdDis;
         var adxM=adxVal(at, e.k);   // 0.95 component is damage/debuff only
         var rate=e.g*mag*1.5*cos*1.1*stack*charmM*adxM*themeM*up*ehMul*cmd*e.n;
+        totK[e.k]=(totK[e.k]||0)+rate; totAll+=rate; anyE=true;
         // store the per-region breakdown for the click-to-explain popup
         var R=[
           {n:'__DBT_bd_numeric__', v:1, note:'__DBT_bd_fixed_conv__'},
@@ -1505,11 +1517,24 @@ __OTH_UNITS__
       var box=document.querySelector('.slot-pme[data-uid="'+c.uid+'"]');
       if(box) box.innerHTML=parts;
     });
+    var tb=document.getElementById('pmeTotal');
+    if(tb){
+      if(!anyE){ tb.innerHTML='<span class="muted">__DBT_none_dash__</span>'; }
+      else {
+        var rows='';
+        ['dmg','heal','buff','debuff'].forEach(function(k){
+          if(totK[k]>0) rows+='<span class="pt-k k-'+k+'">'+pesc(KIND_LBL[k]||k)+' <b>'+totK[k].toFixed(3)+'</b></span>';
+        });
+        tb.innerHTML='<div class="pt-h">__DBT_total_effect__</div><div class="pt-row">'+rows+'</div>'
+                    +'<div class="pt-grand">__DBT_grand_total__ <b>'+totAll.toFixed(3)+'</b></div>';
+      }
+    }
   }
 
   // ----- breakdown popup (click a 牌効 chip to see how the number was produced) -----
   var BREAKDOWN={};
   var ATTR_JP=__DBJS_ATTR_MAP__;
+  var KIND_LBL=__DBJS_KIND_JP__;
   function fmtNum(v){ var s=(Math.round(v*1e6)/1e6).toString(); return s; }
   function magNote(base, add, tm){
     var s='__DBT_bd_base_word__ '+fmtNum(base);

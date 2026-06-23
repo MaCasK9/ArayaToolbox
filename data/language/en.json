@@ -255,7 +255,9 @@
       "cards_unit": "cards",
       "damage": "Damage",
       "atk_suffix": " ATK",
-      "def_suffix": " DEF"
+      "def_suffix": " DEF",
+      "total_effect": "Total effect",
+      "grand_total": "Grand total"
     }
   }
 }
