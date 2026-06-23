@@ -1,32 +1,6 @@
 # -*- coding: utf-8 -*-
-"""
-Masterdata source resolution / git fallback
-===========================================
-The generators read game masterdata JSON via generate_card_list.load_mst(). Normally
-that data comes from a local A.RA.YA database checkout sitting next to this toolset
-(../A.RA.YA/MasterdataBase). When that checkout is absent -- e.g. a collaborator who
-only has this toolbox and not the database -- the needed files are pulled from the
-A.RA.YA GitHub repo and cached under ./masterdata, so every page still builds offline
-afterwards.
-
-Resolution order for one masterdata file (see resolve()):
-  1. ../A.RA.YA/MasterdataBase/<file>   -- the live local database, if present (preferred)
-  2. ./masterdata/<file>                -- local git cache, if already downloaded
-  3. download from GitHub raw -> ./masterdata/<file>, then use it
-
-So the live database always wins when it's there (it is the source of truth and may be
-newer than git); the git cache is only consulted/created when the database is missing.
-
-Refreshing the cache: set MASTERDATA_REFRESH=1 in the environment, or call sync(force=True),
-to re-download the cached files even when they already exist (to pick up upstream updates).
-
-Source repo: https://github.com/LaTlcia/A.RA.YA/tree/main/MasterdataBase
-Standard library only.
-"""
-
 import os as _os, sys as _sys
-# --- make the project root (config.py) and this method/ folder importable,
-#     no matter the cwd or whether this file is run directly or imported ---
+
 _HERE = _os.path.dirname(_os.path.abspath(__file__))
 _ROOT = _os.path.dirname(_HERE)
 for _p in (_ROOT, _HERE):
@@ -41,28 +15,16 @@ import concurrent.futures
 
 import config
 
-# ---------------------------------------------------------------------------
-# All source/location settings now live in config.py. The module-level names
-# below are thin aliases kept for the rest of the toolset (e.g. generate_card_list
-# reads masterdata_sync.PRIMARY_DIR) and so this file reads naturally.
-# ---------------------------------------------------------------------------
-RAW_BASE = config.MASTERDATA_RAW_BASE            # GitHub raw base the fallback pulls from
-PRIMARY_DIR = config.MASTERDATA_DB_DIR           # live local A.RA.YA database (preferred)
-CACHE_DIR = config.MASTERDATA_CACHE_DIR          # git fallback cache (./masterdata)
+
+RAW_BASE = config.MASTERDATA_RAW_BASE
+PRIMARY_DIR = config.MASTERDATA_DB_DIR
+CACHE_DIR = config.MASTERDATA_CACHE_DIR
 
 _UA = {"User-Agent": config.USER_AGENT}
 _REFRESH_ENV = config.MASTERDATA_REFRESH_ENV
 
-# Masterdata files this toolset reads (card list + tactics list + deck builder).
-# Used by sync() to pre-fetch everything in parallel. resolve() does NOT depend on this
-# list -- it downloads whatever filename a generator asks for on demand -- so the build
-# still works even if a generator starts reading a file not listed here.
 NEEDED_FILES = config.MASTERDATA_FILES
 
-
-# ---------------------------------------------------------------------------
-# Small helpers
-# ---------------------------------------------------------------------------
 def _primary_path(filename):
     return os.path.join(PRIMARY_DIR, filename)
 
@@ -76,7 +38,6 @@ def _exists_ok(path):
 
 
 def has_local_db():
-    """True if the live A.RA.YA database checkout is present next to this toolset."""
     return os.path.isdir(PRIMARY_DIR)
 
 
@@ -86,9 +47,6 @@ def _refresh_requested():
     return os.environ.get(_REFRESH_ENV, "").strip().lower() not in ("", "0", "false", "no")
 
 
-# ---------------------------------------------------------------------------
-# Download
-# ---------------------------------------------------------------------------
 def _http_get(url, timeout=config.HTTP_TIMEOUT):
     req = urllib.request.Request(url, headers=_UA)
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -96,8 +54,6 @@ def _http_get(url, timeout=config.HTTP_TIMEOUT):
 
 
 def _valid_masterdata(data):
-    """A real masterdata file parses as JSON and carries payload.mstList; this rejects
-    HTML error pages / truncated downloads so they never poison the cache."""
     try:
         obj = json.loads(data.decode("utf-8"))
     except Exception:
@@ -111,7 +67,7 @@ def _download_one(filename, overwrite):
         return "skip", filename
     try:
         data = _http_get(RAW_BASE + filename)
-    except Exception as e:                              # noqa: BLE001
+    except Exception as e:
         return "fail", "%s : %s" % (filename, e)
     if not _valid_masterdata(data):
         return "fail", "%s : not valid masterdata JSON (got %d bytes)" % (filename, len(data))
@@ -119,7 +75,7 @@ def _download_one(filename, overwrite):
     tmp = dst + ".part"
     with open(tmp, "wb") as f:
         f.write(data)
-    os.replace(tmp, dst)                                # atomic: cache only ever holds whole files
+    os.replace(tmp, dst)
     return "ok", filename
 
 
@@ -146,12 +102,7 @@ def _download_many(filenames, overwrite, workers=config.DOWNLOAD_WORKERS):
     return ok, skip, fail
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 def ensure_cached(filename):
-    """Make sure <filename> exists in the git cache (download on first need / on refresh).
-    Returns the cache path. Raises RuntimeError if it can't be made available."""
     dst = _cache_path(filename)
     overwrite = _refresh_requested()
     if _exists_ok(dst) and not overwrite:
@@ -168,8 +119,6 @@ def ensure_cached(filename):
 
 
 def resolve(filename):
-    """Return a readable path for <filename>, preferring the live local DB, otherwise the
-    git cache (downloading it on first need). This is what load_mst() calls."""
     p = _primary_path(filename)
     if _exists_ok(p):
         return p
@@ -177,16 +126,6 @@ def resolve(filename):
 
 
 def sync(files=NEEDED_FILES, force=None):
-    """Pre-populate the masterdata source so the build can run, downloading from GitHub
-    only what's needed. Used by build_all (and runnable standalone). Returns (ok, skipped,
-    failed) for the download step.
-
-      * Live A.RA.YA database present -> use it; only fetch files the DB happens to be
-        missing (normally none). Pass force=True / MASTERDATA_REFRESH=1 to refresh the
-        git cache anyway.
-      * No database -> ensure every needed file is cached (download missing; or re-download
-        all when refreshing).
-    """
     files = list(files)
     refresh = bool(force) or _refresh_requested()
     print("== masterdata sync ==")
@@ -214,9 +153,5 @@ def sync(files=NEEDED_FILES, force=None):
         print("  Masterdata ready (downloaded %d / cached %d)." % (ok, skip))
     return ok, skip, fail
 
-
-# Run directly to pre-download / refresh the masterdata cache:
-#   python masterdata_sync.py            (download anything missing)
-#   MASTERDATA_REFRESH=1 python masterdata_sync.py   (force re-download)
 if __name__ == "__main__":
     sync()
