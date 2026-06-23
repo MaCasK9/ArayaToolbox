@@ -24,38 +24,47 @@ Strategy:
 Standard library only.
 """
 
+import os as _os, sys as _sys
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+for _p in (_ROOT, _HERE):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
+
 import os
 import re
 import json
 import urllib.request
 import concurrent.futures
 
-REMOTE_BASE = "https://allb.tqlwsl.moe/"
-UPDATE_DIR = REMOTE_BASE + "update/"
+import config
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-LOCAL_DIR = os.path.join(SCRIPT_DIR, "assets", "remote")
-STATE_FILE = os.path.join(LOCAL_DIR, ".sync_state.json")
+# Source / location settings come from config.py; names below are local aliases.
+REMOTE_BASE = config.ASSETS_REMOTE_BASE
+UPDATE_DIR = config.ASSETS_UPDATE_DIR
+
+LOCAL_DIR = config.ASSETS_LOCAL_DIR
+STATE_FILE = config.ASSETS_STATE_FILE
 
 # Remote assets this toolset uses (paths relative to the site root)
-CARD_ICON_REL = "Image/CardIcon/S/CardIconS0%s.png"     # % uniqueId (card)
-TACTICS_ICON_REL = "Image/TacticsIcon/S/TacticsIconS%03d.png"  # % uniqueId (tactics, zero-padded to 3 digits)
-WATERMARK_REL = "Image/Card/Card020000216.jpg"
+CARD_ICON_REL = config.ASSET_CARD_ICON_REMOTE       # % uniqueId (card)
+TACTICS_ICON_REL = config.ASSET_TACTICS_ICON_REMOTE  # % uniqueId (tactics, zero-padded to 3 digits)
+WATERMARK_REL = config.ASSET_WATERMARK_REMOTE
 
 # Local relative paths referenced from the HTML (relative to the html file's dir)
-CARD_ICON_LOCAL = "assets/remote/Image/CardIcon/S/CardIconS0{uid}.png"
-TACTICS_ICON_LOCAL = "assets/remote/Image/TacticsIcon/S/TacticsIconS{uid:03d}.png"
-WATERMARK_LOCAL = "assets/remote/" + WATERMARK_REL
+CARD_ICON_LOCAL = config.URL_CARD_ICON
+TACTICS_ICON_LOCAL = config.URL_TACTICS_ICON
+WATERMARK_LOCAL = config.URL_WATERMARK
 
 RE_UPDATE = re.compile(r"\d{4}-\d{2}-\d{2}-\d{6}_file_update\.txt")
 
-_UA = {"User-Agent": "ArayaToolbox-AssetSync/1.0"}
+_UA = {"User-Agent": config.USER_AGENT}
 
 
 # ---------------------------------------------------------------------------
 # Basic IO
 # ---------------------------------------------------------------------------
-def _http_get(url, timeout=30):
+def _http_get(url, timeout=config.HTTP_TIMEOUT):
     req = urllib.request.Request(url, headers=_UA)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
@@ -125,7 +134,7 @@ def _download_one(rel, overwrite):
     return "ok", rel
 
 
-def _download_many(rels, overwrite, label, workers=8):
+def _download_many(rels, overwrite, label, workers=config.DOWNLOAD_WORKERS):
     rels = list(rels)
     total = len(rels)
     if not total:

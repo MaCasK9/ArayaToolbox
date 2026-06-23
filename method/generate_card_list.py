@@ -18,35 +18,40 @@ these two examples:
 Standard library only (json / html / os).
 """
 
+import os as _os, sys as _sys
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+for _p in (_ROOT, _HERE):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
+
 import json
 import html
 import os
 import re
 import collections
 
+import config
 import card_markers
 import masterdata_sync
 
 # ---------------------------------------------------------------------------
-# Paths (resolved relative to this script, independent of the cwd)
+# Paths / behavior come from config.py (see the project root)
 # ---------------------------------------------------------------------------
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(SCRIPT_DIR)                       # workspace root
-MST = masterdata_sync.PRIMARY_DIR
-OUT = os.path.join(SCRIPT_DIR, "card_list.html")
+# Masterdata location is owned by masterdata_sync: the live A.RA.YA local database if
+# present, otherwise a ./masterdata cache auto-pulled from GitHub. MST kept for reference.
+MST = config.MASTERDATA_DB_DIR
+OUT = config.CARD_LIST_OUT
 
-# Card icons now come from the local mirror (downloaded into assets/remote/ by assets_sync.py; offline-capable)
-CARD_ICON_URL = "assets/remote/Image/CardIcon/S/CardIconS0{uid}.png"
+# Card icons come from the local mirror (downloaded into assets/remote/ by assets_sync.py; offline-capable)
+CARD_ICON_URL = config.URL_CARD_ICON
 
 # ---------------------------------------------------------------------------
-# Label maps
+# Label maps -- pulled from the active language file (./language/<code>.json)
 # ---------------------------------------------------------------------------
-CARD_TYPE_LABEL = {
-    1: "通常単体", 2: "通常範囲", 3: "特殊単体", 4: "特殊範囲",
-    5: "支援", 6: "妨害", 7: "回復",
-}
-ATTRIBUTE_LABEL = {1: "火", 2: "水", 3: "風", 4: "光", 5: "闇"}
-GRADE_LABEL = {0: "普通", 1: "Legendary", 2: "Ultimate"}
+CARD_TYPE_LABEL = config.int_label_map("card_type")
+ATTRIBUTE_LABEL = config.int_label_map("attribute")
+GRADE_LABEL = config.int_label_map("grade")
 
 # Four stats: type -> (normal/awakened max field, awakening bonus field)
 TYPE_FIELDS = {
@@ -68,6 +73,8 @@ ULT_TYPE_FIELDS = {
 # Data loading
 # ---------------------------------------------------------------------------
 def load_mst(filename):
+    # resolve(): live A.RA.YA database if present, else a ./masterdata copy pulled from
+    # GitHub on first need -- so the generators run with or without the local database.
     path = masterdata_sync.resolve(filename)
     with open(path, encoding="utf-8") as f:
         return json.load(f)["payload"]["mstList"]
@@ -508,40 +515,57 @@ def render_row(e):
     )
 
 
-# Column defs: (key, header text, shown by default). The 4 combined columns are hidden by default; toggle them in "表示列".
-COL_DEFS = [
-    ("icon", "図", True), ("name", "名称", True), ("type", "類別", True), ("attr", "属性", True),
-    ("pa", "通攻", True), ("ma", "特攻", True), ("pd", "通防", True), ("md", "特防", True),
-    ("power", "戦闘力", True), ("cost", "Cost", True),
-    ("papd", "通攻+通防", False), ("mamd", "特攻+特防", False),
-    ("pama", "通攻+特攻", False), ("pdmd", "通防+特防", False),
-    ("quest", "対HUGE技能", True), ("gvg", "GVG技能", True),
-    ("gvgAuto", "辅助技能", True), ("legendary", "Legendary技能", True),
+# Column order + default visibility. Header text comes from the language file
+# (card_list.col.<code>); the 4 combined columns are hidden by default.
+_COL = [
+    ("icon", True), ("name", True), ("type", True), ("attr", True),
+    ("pa", True), ("ma", True), ("pd", True), ("md", True),
+    ("power", True), ("cost", True),
+    ("papd", False), ("mamd", False), ("pama", False), ("pdmd", False),
+    ("quest", True), ("gvg", True), ("gvgAuto", True), ("legendary", True),
 ]
+COL_DEFS = [(code, config.t("card_list.col." + code), dflt) for code, dflt in _COL]
+
+# Per-column rendering metadata for the <thead>: code -> (data-sort, data-get, is_num, icon_src)
+_COL_META = {
+    "icon": ("order", "num", False, None),
+    "name": ("name", "attr", False, None),
+    "type": ("type", "num", False, None),
+    "attr": ("attr", "num", False, None),
+    "pa": ("pa", "num", True, None), "ma": ("ma", "num", True, None),
+    "pd": ("pd", "num", True, None), "md": ("md", "num", True, None),
+    "power": ("power", "num", True, None), "cost": ("cost", "num", True, None),
+    "papd": ("papd", "num", True, None), "mamd": ("mamd", "num", True, None),
+    "pama": ("pama", "num", True, None), "pdmd": ("pdmd", "num", True, None),
+    "quest": ("quest", "cell", False, "assets/Skill1.png"),
+    "gvg": ("gvg", "cell", False, "assets/Skill2.png"),
+    "gvgAuto": ("gvgAuto", "cell", False, "assets/Skill3.png"),
+    "legendary": ("legendary", "cell", False, "assets/Skill4.png"),
+}
+
+
+def build_thead():
+    """Build the table header row from COL_DEFS + _COL_META (labels are translated)."""
+    cells = []
+    for code, label, _dflt in COL_DEFS:
+        sort, get, is_num, icon = _COL_META[code]
+        cls = "sortable" + (" num" if is_num else "") + " col-" + code
+        img = '<img class="skh" src="%s" alt="">' % icon if icon else ""
+        cells.append('  <th class="%s" data-sort="%s" data-get="%s">%s%s</th>'
+                     % (cls, sort, get, img, html.escape(label)))
+    return "\n".join(cells)
+
 
 # Skill-feature filter options (for Quest/Gvg, toggled by a switch): (code, label)
-FEATURE_DEFS = [
-    ("Mt", "Mt:「攻撃ダメ20%UP」スタック"),
-    ("An", "An:「支援/妨害30%UP」スタック"),
-    ("Ba", "Ba:「被ダメ30%DOWN」スタック"),
-    ("Et", "Et:「次回復30%UP」スタック"),
-    ("EH", "EH: 異属性でスキル効果UP"),
-    ("SD", "SD: 異属性で効果範囲最大"),
-    ("MN", "MN: 異属性でMP消費DOWN"),
-    ("CT", "CT: 劣勢で効果UP"),
-    ("pa+", "通攻UP"), ("pa-", "通攻DOWN"),
-    ("ma+", "特攻UP"), ("ma-", "特攻DOWN"),
-    ("pd+", "通防UP"), ("pd-", "通防DOWN"),
-    ("md+", "特防UP"), ("md-", "特防DOWN"),
-    ("ea+", "属攻UP"), ("ea-", "属攻DOWN"),
-    ("ed+", "属防UP"), ("ed-", "属防DOWN"),
+_FEATURE_CODES = [
+    "Mt", "An", "Ba", "Et", "EH", "SD", "MN", "CT",
+    "pa+", "pa-", "ma+", "ma-", "pd+", "pd-", "md+", "md-", "ea+", "ea-", "ed+", "ed-",
 ]
+FEATURE_DEFS = [(c, config.t("card_list.feature." + c)) for c in _FEATURE_CODES]
+
 # GvgAuto support-feature filter options: (code, label)
-GA_DEFS = [
-    ("dmgup", "ダメージUP"), ("supup", "支援UP"),
-    ("healup", "回復UP"), ("ptup", "獲得マッチPtUP"),
-    ("rangeup", "効果範囲+1"),
-]
+_GA_CODES = ["dmgup", "supup", "healup", "ptup", "rangeup"]
+GA_DEFS = [(c, config.t("card_list.ga." + c)) for c in _GA_CODES]
 
 
 def build_dropdown(key, label, options):
@@ -576,32 +600,49 @@ def render_html(entries):
     targets = sorted({t for e in entries for t in (e["tq"], e["tg"]) if t})
 
     dropdowns = {
-        "__DD_ATTR__": build_dropdown("attr", "属性", sorted(ATTRIBUTE_LABEL.items())),
-        "__DD_TYPE__": build_dropdown("type", "類別", sorted(CARD_TYPE_LABEL.items())),
-        "__DD_GRADE__": build_dropdown("grade", "等級", sorted(GRADE_LABEL.items())),
-        "__DD_COST__": build_dropdown("cost", "Cost", [(c, c) for c in costs]),
-        "__DD_TARGET__": build_dropdown("target", "タゲ数", [(t, t) for t in targets]),
-        "__DD_FEAT__": build_dropdown("feat", "技能特性", FEATURE_DEFS),
-        "__DD_GA__": build_dropdown("ga", "補助特性", GA_DEFS),
+        "__DD_ATTR__": build_dropdown("attr", config.t("card_list.filter.attr"), sorted(ATTRIBUTE_LABEL.items())),
+        "__DD_TYPE__": build_dropdown("type", config.t("card_list.filter.type"), sorted(CARD_TYPE_LABEL.items())),
+        "__DD_GRADE__": build_dropdown("grade", config.t("card_list.filter.grade"), sorted(GRADE_LABEL.items())),
+        "__DD_COST__": build_dropdown("cost", config.t("card_list.filter.cost"), [(c, c) for c in costs]),
+        "__DD_TARGET__": build_dropdown("target", config.t("card_list.filter.target"), [(t, t) for t in targets]),
+        "__DD_FEAT__": build_dropdown("feat", config.t("card_list.filter.feat"), FEATURE_DEFS),
+        "__DD_GA__": build_dropdown("ga", config.t("card_list.filter.ga"), GA_DEFS),
+    }
+
+    # UI chrome strings for the active language (slotted into the template tokens)
+    chrome = {
+        "__HTML_LANG__": config.html_lang(),
+        "__T_TITLE__": config.t("card_list.title"),
+        "__T_SEARCH__": config.t("card_list.search"),
+        "__T_SEARCH_PH__": config.t("card_list.search_ph"),
+        "__T_SKILLMODE__": config.t("card_list.skillmode"),
+        "__T_SK_GVG__": config.t("skill_type.gvg"),
+        "__T_SK_QUEST__": config.t("skill_type.quest"),
+        "__T_COLS__": config.t("card_list.cols"),
+        "__T_CLEAR__": config.t("card_list.clear"),
+        "__T_COUNT_SUFFIX__": config.t("card_list.count_suffix"),
     }
 
     out = HTML_TEMPLATE
     for token, frag in dropdowns.items():
         out = out.replace(token, frag)
+    for token, val in chrome.items():
+        out = out.replace(token, html.escape(val))
+    out = out.replace("__THEAD__", build_thead())
     out = out.replace("__COL_CHECKBOXES__", col_checkboxes)
     out = out.replace("__COL_INIT_STYLE__", col_init_style)
     out = out.replace("__TOTAL__", str(len(entries)))
     out = out.replace("__ROWS__", rows_html)
-    return out
+    return config.relocate_asset_urls(out)
 
 
 # The template uses __TOKEN__ placeholders + str.replace injection to avoid escaping CSS/JS braces.
 HTML_TEMPLATE = """<!DOCTYPE html>
-<html lang="ja">
+<html lang="__HTML_LANG__">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>カードリスト</title>
+<title>__T_TITLE__</title>
 <style>
   :root { --toolbar-h:46px; --line:#000; --head-bg:#5b6b8c; --head-hover:#6b7da0; --head-fg:#fff;
           --row1:#ffffff; --row2:#eeeeee; --txt:#111; }
@@ -703,8 +744,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>カードリスト</h1>
-  <span><label>検索</label><input id="q" type="text" placeholder="名前で検索"></span>
+  <h1>__T_TITLE__</h1>
+  <span><label>__T_SEARCH__</label><input id="q" type="text" placeholder="__T_SEARCH_PH__"></span>
   __DD_ATTR__
   __DD_TYPE__
   __DD_GRADE__
@@ -712,35 +753,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   __DD_TARGET__
   __DD_FEAT__
   __DD_GA__
-  <span><label>特性対象</label><select id="skillmode"><option value="g">GVG技能</option><option value="q">対HUGE技能</option></select></span>
+  <span><label>__T_SKILLMODE__</label><select id="skillmode"><option value="g">__T_SK_GVG__</option><option value="q">__T_SK_QUEST__</option></select></span>
   <span class="dd">
-    <button class="ddbtn" type="button" data-dd="cols" data-label="表示列">表示列 ▾</button>
+    <button class="ddbtn" type="button" data-dd="cols" data-label="__T_COLS__">__T_COLS__ ▾</button>
     <div class="ddpanel" data-ddp="cols">__COL_CHECKBOXES__</div>
   </span>
-  <button id="clear" type="button">クリア</button>
+  <button id="clear" type="button">__T_CLEAR__</button>
   <span id="count"></span>
 </header>
 <table id="tbl">
 <thead>
 <tr>
-  <th class="sortable col-icon" data-sort="order" data-get="num">図</th>
-  <th class="sortable col-name" data-sort="name" data-get="attr">名称</th>
-  <th class="sortable col-type" data-sort="type" data-get="num">類別</th>
-  <th class="sortable col-attr" data-sort="attr" data-get="num">属性</th>
-  <th class="sortable num col-pa" data-sort="pa" data-get="num">通攻</th>
-  <th class="sortable num col-ma" data-sort="ma" data-get="num">特攻</th>
-  <th class="sortable num col-pd" data-sort="pd" data-get="num">通防</th>
-  <th class="sortable num col-md" data-sort="md" data-get="num">特防</th>
-  <th class="sortable num col-power" data-sort="power" data-get="num">戦闘力</th>
-  <th class="sortable num col-cost" data-sort="cost" data-get="num">Cost</th>
-  <th class="sortable num col-papd" data-sort="papd" data-get="num">通攻+通防</th>
-  <th class="sortable num col-mamd" data-sort="mamd" data-get="num">特攻+特防</th>
-  <th class="sortable num col-pama" data-sort="pama" data-get="num">通攻+特攻</th>
-  <th class="sortable num col-pdmd" data-sort="pdmd" data-get="num">通防+特防</th>
-  <th class="sortable col-quest" data-sort="quest" data-get="cell"><img class="skh" src="assets/Skill1.png" alt="">対HUGE技能</th>
-  <th class="sortable col-gvg" data-sort="gvg" data-get="cell"><img class="skh" src="assets/Skill2.png" alt="">GVG技能</th>
-  <th class="sortable col-gvgAuto" data-sort="gvgAuto" data-get="cell"><img class="skh" src="assets/Skill3.png" alt="">辅助技能</th>
-  <th class="sortable col-legendary" data-sort="legendary" data-get="cell"><img class="skh" src="assets/Skill4.png" alt="">Legendary技能</th>
+__THEAD__
 </tr>
 </thead>
 <tbody id="rows">
@@ -834,7 +858,7 @@ __ROWS__
       rows[i].classList.toggle('hidden', !ok);
       if (ok) shown++;
     }
-    count.textContent = shown + ' / ' + TOTAL + ' 件';
+    count.textContent = shown + ' / ' + TOTAL + ' __T_COUNT_SUFFIX__';
     updateBtns();
   }
 
@@ -916,6 +940,7 @@ def main():
     entries = build_entries(cards, lbb, skill, legendary, ultimate, super_by_card)
     self_check(entries)
     html_text = render_html(entries)
+    config.ensure_output_dir()
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(html_text)
     print("Generated %d card entries" % len(entries))

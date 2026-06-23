@@ -24,11 +24,19 @@ Key rules:
 All displayed text is kept in the original Japanese (not translated).
 """
 
+import os as _os, sys as _sys
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+for _p in (_ROOT, _HERE):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
+
 import os
 import re
 import html
 import json
 
+import config
 from generate_card_list import (
     build_lookups, build_entries, load_mst,
     CARD_ICON_URL, CARD_TYPE_LABEL, ATTRIBUTE_LABEL,
@@ -38,8 +46,7 @@ import card_markers
 import skill_calc as sc
 import generate_tactics_list as gtl
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(SCRIPT_DIR, "deck_builder.html")
+OUT = config.DECK_BUILDER_OUT
 
 # ---------------------------------------------------------------------------
 # Passive (GvgAuto) level / mark parsing
@@ -472,31 +479,44 @@ def render_html(units):
     targets = sorted({u["tg"] for u in units if u["tg"]})
 
     dropdowns = {
-        "__DD_TYPE__": build_dropdown("type", "類別", sorted(CARD_TYPE_LABEL.items())),
-        "__DD_ATTR__": build_dropdown("attr", "属性", sorted(ATTRIBUTE_LABEL.items())),
-        "__DD_TARGET__": build_dropdown("target", "タゲ数", [(t, t) for t in targets]),
-        "__DD_FEAT__": build_dropdown("feat", "技能特性", FEATURE_DEFS),
-        "__DD_GA__": build_dropdown("ga", "補助特性", GA_DEFS),
+        "__DD_TYPE__": build_dropdown("type", config.t("card_list.filter.type"), sorted(CARD_TYPE_LABEL.items())),
+        "__DD_ATTR__": build_dropdown("attr", config.t("card_list.filter.attr"), sorted(ATTRIBUTE_LABEL.items())),
+        "__DD_TARGET__": build_dropdown("target", config.t("card_list.filter.target"), [(t, t) for t in targets]),
+        "__DD_FEAT__": build_dropdown("feat", config.t("card_list.filter.feat"), FEATURE_DEFS),
+        "__DD_GA__": build_dropdown("ga", config.t("card_list.filter.ga"), GA_DEFS),
+    }
+
+    # JS-side label tables (injected as JSON so they follow the active language).
+    js_type_label = {str(k): v for k, v in CARD_TYPE_LABEL.items()}
+    js_ga_label = {c: config.t("card_list.ga." + c) for c in ("dmgup", "supup", "healup", "ptup", "rangeup")}
+
+    chrome = {
+        "__HTML_LANG__": config.html_lang(),
+        "__T_TITLE__": config.t("deck_builder.title"),
     }
 
     out = HTML_TEMPLATE
     for token, frag in dropdowns.items():
         out = out.replace(token, frag)
+    for token, val in chrome.items():
+        out = out.replace(token, html.escape(val))
+    out = out.replace("__JS_TYPE_LABEL__", json.dumps(js_type_label, ensure_ascii=False))
+    out = out.replace("__JS_GA_LABEL__", json.dumps(js_ga_label, ensure_ascii=False))
     out = out.replace("__LEG_UNITS__", leg_html)
     out = out.replace("__OTH_UNITS__", oth_html)
     out = out.replace("__LEG_TOTAL__", str(len(legendary)))
     out = out.replace("__OTH_TOTAL__", str(len(others)))
     out = out.replace("__PME_TACTICS__",
                       json.dumps(build_tactics_options(), separators=(",", ":"), ensure_ascii=False))
-    return out
+    return config.relocate_asset_urls(out)
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
-<html lang="ja">
+<html lang="__HTML_LANG__">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>デッキビルダー</title>
+<title>__T_TITLE__</title>
 <style>
   :root { --head-bg:#5b6b8c; --head-hover:#6b7da0; --head-fg:#fff;
           --line:#000; --row1:#ffffff; --row2:#eeeeee; --txt:#111; --toolbar-h:46px; }
@@ -728,7 +748,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>デッキビルダー</h1>
+  <h1>__T_TITLE__</h1>
   <div class="roleSw">
     <button type="button" id="roleF" class="on">前衛</button>
     <button type="button" id="roleB">後衛</button>
@@ -865,8 +885,8 @@ __OTH_UNITS__
   var pcount = document.getElementById('pcount');
   var units = Array.prototype.slice.call(document.querySelectorAll('.unit'));
 
-  var TYPE_LABEL = {1:'通常単体',2:'通常範囲',3:'特殊単体',4:'特殊範囲',5:'支援',6:'妨害',7:'回復'};
-  var GA_LABEL = {dmgup:'ダメージUP',supup:'支援UP',healup:'回復UP',ptup:'獲得マッチPtUP',rangeup:'効果範囲+1'};
+  var TYPE_LABEL = __JS_TYPE_LABEL__;
+  var GA_LABEL = __JS_GA_LABEL__;
   var ROMAN = {'Ⅰ':1,'Ⅱ':2,'Ⅲ':3,'Ⅳ':4,'Ⅴ':5,'Ⅵ':6,'Ⅶ':7,'Ⅷ':8,'Ⅸ':9,'Ⅹ':10};
 
   // Stat changes (individual): 14 stats x up/down = 28 items. Icon = BattleIconSkillImg{n}
@@ -1544,6 +1564,7 @@ def main():
     entries = build_entries(cards, lbb, skill, legendary, ultimate, super_by_card)
     units = build_units(entries)
     html_text = render_html(units)
+    config.ensure_output_dir()
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(html_text)
     leg = sum(1 for u in units if u["leg"])

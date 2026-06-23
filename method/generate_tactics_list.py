@@ -19,23 +19,30 @@ All displayed game text is kept in the original Japanese (not translated).
 Standard library only (plus the shared helpers imported from generate_card_list).
 """
 
+import os as _os, sys as _sys
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+for _p in (_ROOT, _HERE):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
+
 import json
 import html
 import os
 import re
 
+import config
 import card_markers
 from generate_card_list import load_mst, fmt, build_dropdown, lbb_bonus
 
 # ---------------------------------------------------------------------------
-# Paths
+# Paths / behavior come from config.py
 # ---------------------------------------------------------------------------
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(SCRIPT_DIR, "tactics_list.html")
+OUT = config.TACTICS_LIST_OUT
 
 # Tactics icons come from the local mirror (downloaded by assets_sync.py; offline-capable).
 # uniqueId is zero-padded to 3 digits (tactics uniqueIds are small, 1..~227).
-TACTICS_ICON_URL = "assets/remote/Image/TacticsIcon/S/TacticsIconS{uid:03d}.png"
+TACTICS_ICON_URL = config.URL_TACTICS_ICON
 
 # ---------------------------------------------------------------------------
 # Stat fields (the four panels). bonusType 1/2/3/4 = 通攻/通防/特攻/特防 (same as cards).
@@ -51,15 +58,7 @@ STAT_FIELD = {
 # Effect-category classification (the 効果類別 filter), keyed by the GVG effect's `type`.
 # The GVG effect is the canonical レギオンマッチ effect these tactics are built around.
 # ---------------------------------------------------------------------------
-CAT_LABEL = {
-    "attr":   "属性",      # X 属性のスキル効果が増加 (single / dual attribute)
-    "shield": "盾",  # enemy attribute skill effect down / incoming-damage reduction
-    "rate":   "発動率",          # auto (補助) skill activation rate up / enemy down
-    "buff":   "buff",      # ATK/DEF / attribute ATK/DEF up (ally) or down (enemy)
-    "eff":    "特定効果",    # specific skill-type (支援/妨害/スキル攻撃) effect up/down
-    "mp":     "MP",              # restore MP / reduce MP cost
-    "other":  "その他",          # use-count reset / prep- or effect-time change / unknown
-}
+CAT_LABEL = config.section("tactics_list.cat")
 CAT_DEFS = [(c, CAT_LABEL[c]) for c in ("attr", "shield", "rate", "buff", "eff", "mp", "other")]
 
 _TYPE_CAT = {}
@@ -205,7 +204,7 @@ def build_entries():
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
-RARITY_LABEL = {4: "★4", 5: "★5", 6: "★6"}
+RARITY_LABEL = config.int_label_map("rarity")
 
 
 def render_skill_cell(eff, icon, col_class):
@@ -271,15 +270,41 @@ def render_row(e):
 
 
 # Column defs: (key, header text, shown by default). Combined columns hidden by default.
-COL_DEFS = [
-    ("icon", "図", True), ("name", "名称", True),
-    ("pa", "通攻", True), ("ma", "特攻", True), ("pd", "通防", True), ("md", "特防", True),
-    ("power", "戦闘力", True),
-    ("papd", "通攻+通防", False), ("mamd", "特攻+特防", False),
-    ("pama", "通攻+特攻", False), ("pdmd", "通防+特防", False),
-    ("mp", "消費MP", True),
-    ("quest", "対HUGE技能", True), ("gvg", "GVG技能", True),
+_COL = [
+    ("icon", True), ("name", True),
+    ("pa", True), ("ma", True), ("pd", True), ("md", True),
+    ("power", True),
+    ("papd", False), ("mamd", False), ("pama", False), ("pdmd", False),
+    ("mp", True),
+    ("quest", True), ("gvg", True),
 ]
+COL_DEFS = [(code, config.t("tactics_list.col." + code), dflt) for code, dflt in _COL]
+
+# Per-column <thead> metadata: code -> (data-sort, data-get, is_num, icon_src).
+# Note: name sorts/gets as "name" (not "attr"), and the MP column sorts on "sp".
+_COL_META = {
+    "icon": ("order", "num", False, None),
+    "name": ("name", "name", False, None),
+    "pa": ("pa", "num", True, None), "ma": ("ma", "num", True, None),
+    "pd": ("pd", "num", True, None), "md": ("md", "num", True, None),
+    "power": ("power", "num", True, None),
+    "papd": ("papd", "num", True, None), "mamd": ("mamd", "num", True, None),
+    "pama": ("pama", "num", True, None), "pdmd": ("pdmd", "num", True, None),
+    "mp": ("sp", "num", True, None),
+    "quest": ("quest", "cell", False, "assets/Skill1.png"),
+    "gvg": ("gvg", "cell", False, "assets/Skill2.png"),
+}
+
+
+def build_thead():
+    cells = []
+    for code, label, _dflt in COL_DEFS:
+        sort, get, is_num, icon = _COL_META[code]
+        cls = "sortable" + (" num" if is_num else "") + " col-" + code
+        img = '<img class="skh" src="%s" alt="">' % icon if icon else ""
+        cells.append('  <th class="%s" data-sort="%s" data-get="%s">%s%s</th>'
+                     % (cls, sort, get, img, html.escape(label)))
+    return "\n".join(cells)
 
 
 def render_html(entries):
@@ -297,28 +322,42 @@ def render_html(entries):
     rarities = sorted({e["rarity"] for e in entries})
 
     dropdowns = {
-        "__DD_RARITY__": build_dropdown("rarity", "稀有度", [(r, RARITY_LABEL.get(r, r)) for r in rarities]),
-        "__DD_CAT__": build_dropdown("cat", "効果類別", CAT_DEFS),
-        "__DD_MP__": build_dropdown("mp", "MP消費", [("1", "消費あり"), ("0", "消費なし")]),
+        "__DD_RARITY__": build_dropdown("rarity", config.t("tactics_list.filter.rarity"), [(r, RARITY_LABEL.get(r, r)) for r in rarities]),
+        "__DD_CAT__": build_dropdown("cat", config.t("tactics_list.filter.cat"), CAT_DEFS),
+        "__DD_MP__": build_dropdown("mp", config.t("tactics_list.filter.mp"),
+                                    [("1", config.t("tactics_list.mp_yes")), ("0", config.t("tactics_list.mp_no"))]),
+    }
+
+    chrome = {
+        "__HTML_LANG__": config.html_lang(),
+        "__T_TITLE__": config.t("tactics_list.title"),
+        "__T_SEARCH__": config.t("tactics_list.search"),
+        "__T_SEARCH_PH__": config.t("tactics_list.search_ph"),
+        "__T_COLS__": config.t("tactics_list.cols"),
+        "__T_CLEAR__": config.t("tactics_list.clear"),
+        "__T_COUNT_SUFFIX__": config.t("tactics_list.count_suffix"),
     }
 
     out = HTML_TEMPLATE
     for token, frag in dropdowns.items():
         out = out.replace(token, frag)
+    for token, val in chrome.items():
+        out = out.replace(token, html.escape(val))
+    out = out.replace("__THEAD__", build_thead())
     out = out.replace("__COL_CHECKBOXES__", col_checkboxes)
     out = out.replace("__COL_INIT_STYLE__", col_init_style)
     out = out.replace("__TOTAL__", str(len(entries)))
     out = out.replace("__ROWS__", rows_html)
-    return out
+    return config.relocate_asset_urls(out)
 
 
 # The template uses __TOKEN__ placeholders + str.replace injection to avoid escaping CSS/JS braces.
 HTML_TEMPLATE = """<!DOCTYPE html>
-<html lang="ja">
+<html lang="__HTML_LANG__">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>オーダーリスト</title>
+<title>__T_TITLE__</title>
 <style>
   :root { --toolbar-h:46px; --line:#000; --head-bg:#5b6b8c; --head-hover:#6b7da0; --head-fg:#fff;
           --row1:#ffffff; --row2:#eeeeee; --txt:#111; }
@@ -417,35 +456,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>オーダーリスト</h1>
-  <span><label>検索</label><input id="q" type="text" placeholder="名前で検索"></span>
+  <h1>__T_TITLE__</h1>
+  <span><label>__T_SEARCH__</label><input id="q" type="text" placeholder="__T_SEARCH_PH__"></span>
   __DD_RARITY__
   __DD_CAT__
   __DD_MP__
   <span class="dd">
-    <button class="ddbtn" type="button" data-dd="cols" data-label="表示列">表示列 ▾</button>
+    <button class="ddbtn" type="button" data-dd="cols" data-label="__T_COLS__">__T_COLS__ ▾</button>
     <div class="ddpanel" data-ddp="cols">__COL_CHECKBOXES__</div>
   </span>
-  <button id="clear" type="button">クリア</button>
+  <button id="clear" type="button">__T_CLEAR__</button>
   <span id="count"></span>
 </header>
 <table id="tbl">
 <thead>
 <tr>
-  <th class="sortable col-icon" data-sort="order" data-get="num">図</th>
-  <th class="sortable col-name" data-sort="name" data-get="name">名称</th>
-  <th class="sortable num col-pa" data-sort="pa" data-get="num">通攻</th>
-  <th class="sortable num col-ma" data-sort="ma" data-get="num">特攻</th>
-  <th class="sortable num col-pd" data-sort="pd" data-get="num">通防</th>
-  <th class="sortable num col-md" data-sort="md" data-get="num">特防</th>
-  <th class="sortable num col-power" data-sort="power" data-get="num">戦闘力</th>
-  <th class="sortable num col-papd" data-sort="papd" data-get="num">通攻+通防</th>
-  <th class="sortable num col-mamd" data-sort="mamd" data-get="num">特攻+特防</th>
-  <th class="sortable num col-pama" data-sort="pama" data-get="num">通攻+特攻</th>
-  <th class="sortable num col-pdmd" data-sort="pdmd" data-get="num">通防+特防</th>
-  <th class="sortable num col-mp" data-sort="sp" data-get="num">消費MP</th>
-  <th class="sortable col-quest" data-sort="quest" data-get="cell"><img class="skh" src="assets/Skill1.png" alt="">対HUGE技能</th>
-  <th class="sortable col-gvg" data-sort="gvg" data-get="cell"><img class="skh" src="assets/Skill2.png" alt="">GVG技能</th>
+__THEAD__
 </tr>
 </thead>
 <tbody id="rows">
@@ -530,7 +556,7 @@ __ROWS__
       rows[r].classList.toggle('hidden', !ok);
       if (ok) shown++;
     }
-    count.textContent = shown + ' / ' + TOTAL + ' 件';
+    count.textContent = shown + ' / ' + TOTAL + ' __T_COUNT_SUFFIX__';
     updateBtns();
   }
 
@@ -608,6 +634,7 @@ __ROWS__
 def main():
     entries = build_entries()
     html_text = render_html(entries)
+    config.ensure_output_dir()
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(html_text)
     print("Generated %d tactics entries" % len(entries))

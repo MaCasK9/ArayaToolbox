@@ -17,13 +17,21 @@ Marker rules:
 Frame: Ultimate (gradeType==2) uses IconRarity08L, otherwise IconRarity06L (covers the whole card).
 """
 
+import os as _os, sys as _sys
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+for _p in (_ROOT, _HERE):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
+
 import os
 from PIL import Image
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-SPRITE_DIR = os.path.join(SCRIPT_DIR, "assets", "Sprite")
-MARKER_DIR = os.path.join(SCRIPT_DIR, "assets", "markers")
-MARKER_REL = "assets/markers"
+import config
+
+SPRITE_DIR = config.SPRITE_DIR
+MARKER_DIR = config.MARKER_DIR
+MARKER_REL = config.URL_MARKER_DIR
 
 # Composite positions (center coords) / sizes (measured from the sprites)
 PLAIN_C = (37, 37)       # 75x75 single circle
@@ -114,7 +122,7 @@ def marker_for(entry, context):
 
 
 def frame_rel(is_ultimate):
-    return "assets/Sprite/IconRarity0%dLImage.png" % (8 if is_ultimate else 6)
+    return config.URL_SPRITE_DIR + "/IconRarity0%dLImage.png" % (8 if is_ultimate else 6)
 
 
 # ---------------------------------------------------------------------------
@@ -135,4 +143,4 @@ def tactics_frame_rel(rarity):
     """Rarity frame for tactics. Rarity 4/5 use the dedicated new frames; anything else
     (6) falls back to the rarity-6 frame shared with cards."""
     r = rarity if rarity in (4, 5) else 6
-    return "assets/Sprite/IconRarity0%dLImage.png" % r
+    return config.URL_SPRITE_DIR + "/IconRarity0%dLImage.png" % r

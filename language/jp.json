@@ -1,0 +1,94 @@
+{
+  "_meta": { "name": "日本語", "code": "jp", "html_lang": "ja" },
+
+  "attribute": { "1": "火", "2": "水", "3": "風", "4": "光", "5": "闇" },
+
+  "card_type": {
+    "1": "通常単体", "2": "通常範囲", "3": "特殊単体", "4": "特殊範囲",
+    "5": "支援", "6": "妨害", "7": "回復"
+  },
+
+  "grade": { "0": "普通", "1": "Legendary", "2": "Ultimate" },
+
+  "rarity": { "4": "★4", "5": "★5", "6": "★6" },
+
+  "stat": {
+    "pa": "通攻", "ma": "特攻", "pd": "通防", "md": "特防",
+    "power": "戦闘力", "cost": "Cost", "mp": "消費MP",
+    "papd": "通攻+通防", "mamd": "特攻+特防", "pama": "通攻+特攻", "pdmd": "通防+特防"
+  },
+
+  "skill_type": {
+    "quest": "対HUGE技能", "gvg": "GVG技能",
+    "gvgAuto": "補助技能", "legendary": "Legendary技能"
+  },
+
+  "card_list": {
+    "title": "カードリスト",
+    "search": "検索",
+    "search_ph": "名前で検索",
+    "skillmode": "特性対象",
+    "cols": "表示列",
+    "clear": "クリア",
+    "count_suffix": "件",
+    "filter": {
+      "attr": "属性", "type": "類別", "grade": "等級", "cost": "Cost",
+      "target": "タゲ数", "feat": "技能特性", "ga": "補助特性"
+    },
+    "col": {
+      "icon": "図", "name": "名称", "type": "類別", "attr": "属性",
+      "pa": "通攻", "ma": "特攻", "pd": "通防", "md": "特防",
+      "power": "戦闘力", "cost": "Cost",
+      "papd": "通攻+通防", "mamd": "特攻+特防", "pama": "通攻+特攻", "pdmd": "通防+特防",
+      "quest": "対HUGE技能", "gvg": "GVG技能", "gvgAuto": "補助技能", "legendary": "Legendary技能"
+    },
+    "feature": {
+      "Mt": "Mt:「攻撃ダメ20%UP」スタック",
+      "An": "An:「支援/妨害30%UP」スタック",
+      "Ba": "Ba:「被ダメ30%DOWN」スタック",
+      "Et": "Et:「次回復30%UP」スタック",
+      "EH": "EH: 異属性でスキル効果UP",
+      "SD": "SD: 異属性で効果範囲最大",
+      "MN": "MN: 異属性でMP消費DOWN",
+      "CT": "CT: 劣勢で効果UP",
+      "pa+": "通攻UP", "pa-": "通攻DOWN",
+      "ma+": "特攻UP", "ma-": "特攻DOWN",
+      "pd+": "通防UP", "pd-": "通防DOWN",
+      "md+": "特防UP", "md-": "特防DOWN",
+      "ea+": "属攻UP", "ea-": "属攻DOWN",
+      "ed+": "属防UP", "ed-": "属防DOWN"
+    },
+    "ga": {
+      "dmgup": "ダメージUP", "supup": "支援UP", "healup": "回復UP",
+      "ptup": "獲得マッチPtUP", "rangeup": "効果範囲+1"
+    }
+  },
+
+  "tactics_list": {
+    "title": "オーダーリスト",
+    "search": "検索",
+    "search_ph": "名前で検索",
+    "cols": "表示列",
+    "clear": "クリア",
+    "count_suffix": "件",
+    "filter": { "rarity": "レアリティ", "cat": "効果類別", "mp": "MP消費" },
+    "mp_yes": "消費あり",
+    "mp_no": "消費なし",
+    "cat": {
+      "attr": "属性", "shield": "盾", "rate": "発動率", "buff": "buff",
+      "eff": "特定効果", "mp": "MP", "other": "その他"
+    },
+    "col": {
+      "icon": "図", "name": "名称",
+      "pa": "通攻", "ma": "特攻", "pd": "通防", "md": "特防",
+      "power": "戦闘力",
+      "papd": "通攻+通防", "mamd": "特攻+特防", "pama": "通攻+特攻", "pdmd": "通防+特防",
+      "mp": "消費MP",
+      "quest": "対HUGE技能", "gvg": "GVG技能"
+    }
+  },
+
+  "deck_builder": {
+    "title": "デッキビルダー"
+  }
+}

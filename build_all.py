@@ -1,19 +1,13 @@
 # -*- coding: utf-8 -*-
-"""
-Rebuild all HTML in one shot
-============================
-Regenerates, in order:
-  * card_list.html     -- card list (generate_card_list.py)
-  * deck_builder.html  -- deck builder (generate_deck_builder.py)
-  * tactics_list.html  -- tactics (commands) list (generate_tactics_list.py)
+import os as _os, sys as _sys
 
-After a data update, just run this script to refresh all pages:
-    conda run -n localdb python localDB/build_all.py
+_ROOT = _os.path.dirname(_os.path.abspath(__file__))
+_METHOD = _os.path.join(_ROOT, "method")
+for _p in (_ROOT, _METHOD):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
 
-It first syncs assets (full download the first time, deltas only afterwards) so the
-pages work offline.
-"""
-
+import config
 import masterdata_sync
 import assets_sync
 import generate_card_list
@@ -22,7 +16,12 @@ import generate_tactics_list
 
 
 def main():
-    print("=== sync masterdata ===")
+    print("=== ArayaToolbox build ===")
+    print("language: %s (%s)  |  set ARAYA_LANG=cn/jp/en or edit config.LANGUAGE"
+          % (config.LANGUAGE, config.t("_meta.name", config.LANGUAGE)))
+
+    print("\n=== sync masterdata ===")
+
     masterdata_sync.sync()
 
     print("\n=== sync assets ===")

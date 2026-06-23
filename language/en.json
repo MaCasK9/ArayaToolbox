@@ -1,0 +1,94 @@
+{
+  "_meta": { "name": "English", "code": "en", "html_lang": "en" },
+
+  "attribute": { "1": "Fire", "2": "Water", "3": "Wind", "4": "Light", "5": "Dark" },
+
+  "card_type": {
+    "1": "Phys Single", "2": "Phys AoE", "3": "Sp Single", "4": "Sp AoE",
+    "5": "Buff", "6": "Debuff", "7": "Heal"
+  },
+
+  "grade": { "0": "Normal", "1": "Legendary", "2": "Ultimate" },
+
+  "rarity": { "4": "★4", "5": "★5", "6": "★6" },
+
+  "stat": {
+    "pa": "P.ATK", "ma": "S.ATK", "pd": "P.DEF", "md": "S.DEF",
+    "power": "Power", "cost": "Cost", "mp": "MP Cost",
+    "papd": "P.ATK+P.DEF", "mamd": "S.ATK+S.DEF", "pama": "P.ATK+S.ATK", "pdmd": "P.DEF+S.DEF"
+  },
+
+  "skill_type": {
+    "quest": "vs HUGE", "gvg": "GVG",
+    "gvgAuto": "Support", "legendary": "Legendary"
+  },
+
+  "card_list": {
+    "title": "Card List",
+    "search": "Search",
+    "search_ph": "Search by name",
+    "skillmode": "Skill view",
+    "cols": "Columns",
+    "clear": "Clear",
+    "count_suffix": "cards",
+    "filter": {
+      "attr": "Attribute", "type": "Type", "grade": "Grade", "cost": "Cost",
+      "target": "Targets", "feat": "Skill traits", "ga": "Support traits"
+    },
+    "col": {
+      "icon": "Img", "name": "Name", "type": "Type", "attr": "Attr",
+      "pa": "P.ATK", "ma": "S.ATK", "pd": "P.DEF", "md": "S.DEF",
+      "power": "Power", "cost": "Cost",
+      "papd": "P.ATK+P.DEF", "mamd": "S.ATK+S.DEF", "pama": "P.ATK+S.ATK", "pdmd": "P.DEF+S.DEF",
+      "quest": "vs HUGE", "gvg": "GVG", "gvgAuto": "Support", "legendary": "Legendary"
+    },
+    "feature": {
+      "Mt": "Mt: 'attack dmg +20%' stack",
+      "An": "An: 'buff/debuff +30%' stack",
+      "Ba": "Ba: 'dmg taken -30%' stack",
+      "Et": "Et: 'next heal +30%' stack",
+      "EH": "EH: skill effect up vs off-attr",
+      "SD": "SD: max range vs off-attr",
+      "MN": "MN: MP cost down vs off-attr",
+      "CT": "CT: effect up when losing",
+      "pa+": "P.ATK up", "pa-": "P.ATK down",
+      "ma+": "S.ATK up", "ma-": "S.ATK down",
+      "pd+": "P.DEF up", "pd-": "P.DEF down",
+      "md+": "S.DEF up", "md-": "S.DEF down",
+      "ea+": "Attr.ATK up", "ea-": "Attr.ATK down",
+      "ed+": "Attr.DEF up", "ed-": "Attr.DEF down"
+    },
+    "ga": {
+      "dmgup": "Damage up", "supup": "Buff up", "healup": "Heal up",
+      "ptup": "Match Pt up", "rangeup": "Range +1"
+    }
+  },
+
+  "tactics_list": {
+    "title": "Order List",
+    "search": "Search",
+    "search_ph": "Search by name",
+    "cols": "Columns",
+    "clear": "Clear",
+    "count_suffix": "items",
+    "filter": { "rarity": "Rarity", "cat": "Effect type", "mp": "MP use" },
+    "mp_yes": "Costs MP",
+    "mp_no": "No MP cost",
+    "cat": {
+      "attr": "Attribute", "shield": "Shield", "rate": "Proc rate", "buff": "Buff",
+      "eff": "Specific effect", "mp": "MP", "other": "Other"
+    },
+    "col": {
+      "icon": "Img", "name": "Name",
+      "pa": "P.ATK", "ma": "S.ATK", "pd": "P.DEF", "md": "S.DEF",
+      "power": "Power",
+      "papd": "P.ATK+P.DEF", "mamd": "S.ATK+S.DEF", "pama": "P.ATK+S.ATK", "pdmd": "P.DEF+S.DEF",
+      "mp": "MP Cost",
+      "quest": "vs HUGE", "gvg": "GVG"
+    }
+  },
+
+  "deck_builder": {
+    "title": "Deck Builder"
+  }
+}
