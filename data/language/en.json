@@ -257,7 +257,8 @@
       "atk_suffix": " ATK",
       "def_suffix": " DEF",
       "total_effect": "Total effect",
-      "grand_total": "Grand total"
+      "grand_total": "Grand total",
+      "per_card": "Per-card"
     }
   }
 }

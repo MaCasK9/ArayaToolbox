@@ -701,6 +701,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .pme-attrs label { display:inline-flex; align-items:center; gap:2px; color:#333; font-size:12px; }
   .pme-attrs input[type=number] { width:46px; padding:2px 4px; border:1px solid #9aa3b8; border-radius:5px; font-size:12px; }
   .pme-attrs select { padding:2px 4px; border:1px solid #9aa3b8; border-radius:5px; font-size:12px; }
+  .pme-cardsel { margin:2px 0; }
+  .simcards-tg { background:#fff; color:#222; border:1px solid #9aa3b8; border-radius:6px;
+                 padding:3px 8px; font-size:12px; cursor:pointer; }
+  .simcards-tg .caret { display:inline-block; transition:transform .15s; }
+  .simcards-tg[aria-expanded="true"] .caret { transform:rotate(180deg); }
+  .pme-cards { margin-top:6px; max-height:240px; overflow:auto; border:1px solid #d5dae6; border-radius:6px; }
+  .pme-cards .muted { display:block; padding:6px 8px; color:#888; }
+  table.simtbl { border-collapse:collapse; width:100%; font-size:12px; }
+  table.simtbl th, table.simtbl td { padding:2px 6px; border-bottom:1px solid #eef0f5; text-align:center; }
+  table.simtbl thead th { position:sticky; top:0; background:#f3f5fa; color:#555; font-weight:700; }
+  table.simtbl td.nm { text-align:left; white-space:nowrap; max-width:150px; overflow:hidden; text-overflow:ellipsis; }
+  table.simtbl td.nm img { width:16px; height:16px; vertical-align:-3px; margin-right:4px; }
+  table.simtbl tbody tr:hover { background:#f7f9fd; }
   .pme-tac { display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; }
   .pme-tcol { flex:1 1 220px; min-width:0; }
   .pme-tg { margin-bottom:6px; }
@@ -867,6 +880,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="pme-blk"><b>__DBT_eff__</b>
           <div class="pme-attrs"><label class="chk"><input type="checkbox" id="ehct"> EH/CT </label></div>
         </div>
+      </div>
+
+      <div class="pme-cardsel">
+        <button type="button" class="simcards-tg" id="simCardsToggle" aria-expanded="false">__DBT_per_card__ <span class="caret">▾</span></button>
+        <div class="pme-cards" id="simCards" hidden></div>
       </div>
 
       <div class="pme-tac">
@@ -1146,6 +1164,8 @@ __OTH_UNITS__
       var btn=units[i].querySelector('.u-add'); if(btn) btn.textContent=inDeck?'__DBT_in_deck__':'__DBT_add__';
     }
     renderStats(); syncCode();
+    updateMasters();
+    if(document.getElementById('simCards') && !document.getElementById('simCards').hasAttribute('hidden')) rebuildSimCards();
     if(pmeOn()) recalcAll();
     if(document.getElementById('deckOnly').checked) applyFilter();
   }
@@ -1411,13 +1431,42 @@ __OTH_UNITS__
   function pchk(id){ return document.getElementById(id).checked; }
 
   var PBASE=[0.15,0.225,0.30];   // passive activation rate by "+" count (0/1/2)
+  var MASTER_KEY={sMt:'mt', sAn:'an', sEt:'et', ehct:'eh'};
+  var MASTER_ID={mt:'sMt', an:'sAn', et:'sEt', eh:'ehct'};
+  var simAll={mt:false, an:false, et:false, eh:false};
+  var simSel={mt:{}, an:{}, et:{}, eh:{}};
+  function simGet(k,uid){ var m=simSel[k]; return (uid in m)?m[uid]:simAll[k]; }
+  function updateMasters(){
+    var cards=deckCards();
+    Object.keys(MASTER_ID).forEach(function(k){
+      var cb=document.getElementById(MASTER_ID[k]); if(!cb) return;
+      if(!cards.length){ cb.checked=simAll[k]; cb.indeterminate=false; return; }
+      var on=0; cards.forEach(function(c){ if(simGet(k,c.uid)) on++; });
+      cb.indeterminate=(on>0 && on<cards.length);
+      cb.checked=(on===cards.length);
+    });
+  }
+  function rebuildSimCards(){
+    var box=document.getElementById('simCards'); if(!box) return;
+    var cards=deckCards();
+    if(!cards.length){ box.innerHTML='<span class="muted">__DBT_none_dash__</span>'; return; }
+    var h='<table class="simtbl"><thead><tr><th></th><th>Mt</th><th>An</th><th>Et</th><th>EH/CT</th></tr></thead><tbody>';
+    cards.forEach(function(c){
+      h+='<tr data-uid="'+c.uid+'"><td class="nm"><img src="'+iconUrl(c.uid)+'" alt="">'+pesc(c.name)+'</td>';
+      ['mt','an','et','eh'].forEach(function(k){
+        h+='<td><input type="checkbox" class="simchk" data-k="'+k+'" data-uid="'+c.uid+'"'+(simGet(k,c.uid)?' checked':'')+'></td>';
+      });
+      h+='</tr>';
+    });
+    box.innerHTML=h+'</tbody></table>';
+  }
+
   function recalcAll(){
     if(!pmeOn()) return;
     var deck=deckCards(), a;
     var charm={},adx={},theme={};
     for(a=1;a<=5;a++){ charm[a]=pnum('charm'+a); adx[a]=+document.getElementById('adx'+a).value; theme[a]=pchk('theme'+a); }
     var costJob=+document.getElementById('costJob').value;
-    var sMt=pchk('sMt'), sAn=pchk('sAn'), sEt=pchk('sEt'), ehct=pchk('ehct');
     var myAttr=selTac('tacMyAttr',PME_TACTICS.my_attr), myRate=selTac('tacMyRate',PME_TACTICS.my_rate),
         myEff=selTac('tacMyEff',PME_TACTICS.my_eff), enShield=selTac('tacEnShield',PME_TACTICS.en_shield),
         enRate=selTac('tacEnRate',PME_TACTICS.en_rate), enEff=selTac('tacEnEff',PME_TACTICS.en_eff);
@@ -1472,6 +1521,7 @@ __OTH_UNITS__
     var totL={}, nseen=0, anyE=false;
     deck.forEach(function(c){ if(!c.calc||!c.calc.e.length) return;
       var at=c.calc.a, ct=c.calc.c;
+      var sMt=simGet('mt',c.uid), sAn=simGet('an',c.uid), sEt=simGet('et',c.uid), ehct=simGet('eh',c.uid);
       var trig=(c.calc.ut||[]).some(function(t){ return activeTypes[t]; });
       var cos=(costJob&&costJob===ct)?1.15:1;
       var charmM=1+(charm[at]||0)/100, themeM=theme[at]?1.1:1;
@@ -1598,7 +1648,17 @@ __OTH_UNITS__
     this.classList.toggle('active', on);
     if(on) recalcAll();
   });
-  document.getElementById('pmePanel').addEventListener('change', recalcAll);
+  document.getElementById('pmePanel').addEventListener('change', function(e){
+    var t=e.target;
+    if(t && MASTER_KEY[t.id]){ var k=MASTER_KEY[t.id]; simAll[k]=t.checked; simSel[k]={}; t.indeterminate=false; rebuildSimCards(); }
+    else if(t && t.classList && t.classList.contains('simchk')){ simSel[t.dataset.k][t.dataset.uid]=t.checked; updateMasters(); }
+    recalcAll();
+  });
+  document.getElementById('simCardsToggle').addEventListener('click', function(){
+    var box=document.getElementById('simCards'), show=box.hasAttribute('hidden');
+    if(show){ box.removeAttribute('hidden'); rebuildSimCards(); } else { box.setAttribute('hidden',''); }
+    this.setAttribute('aria-expanded', show?'true':'false');
+  });
   document.getElementById('pmePanel').addEventListener('input', function(e){ if(e.target.type==='number') recalcAll(); });
   document.getElementById('pmePanel').addEventListener('click', function(e){
     var b=e.target.closest('.tac-ic'); if(!b) return;
