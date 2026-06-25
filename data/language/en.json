@@ -259,7 +259,8 @@
       "total_effect": "Total effect",
       "grand_total": "Grand total",
       "per_card": "Per-card",
-      "tgt_mod": "Target correction"
+      "tgt_mod": "Target correction",
+      "exp_mode": "Expected value"
     }
   }
 }
