@@ -754,6 +754,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                  pointer-events:none; filter:drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
   /* per-effect 牌効 chips (under each deck card) */
   .pme-eff { display:inline-block; font-size:10px; margin:1px 2px 0 0; padding:0 3px; border-radius:3px;
+             max-width:100%; box-sizing:border-box; overflow:hidden;
              font-variant-numeric:tabular-nums; line-height:1.5; cursor:pointer; }
   .pme-eff:hover { outline:1px solid rgba(0,0,0,.35); }
   .pme-eff b { font-weight:700; }
@@ -1607,7 +1608,7 @@ __OTH_UNITS__
         parts+='<span class="pme-eff k-'+e.k+'" data-bd="'+c.uid+'#'+ei+'" title="__DBT_click_breakdown__">'+pesc(e.l)+' <b>'+fmtVal(vlo,vhi,vex,expMode)+'</b></span>';
       });
       var box=document.querySelector('.slot-pme[data-uid="'+c.uid+'"]');
-      if(box) box.innerHTML=parts;
+      if(box){ box.innerHTML=parts; fitChips(box); }
     });
     var tb=document.getElementById('pmeTotal');
     if(tb){
@@ -1628,6 +1629,27 @@ __OTH_UNITS__
   var BREAKDOWN={};
   var ATTR_JP=__DBJS_ATTR_MAP__;
   function fmtNum(v){ var s=(Math.round(v*1e6)/1e6).toString(); return s; }
+  function fitChips(box){
+    if(!box) return;
+    var w=box.clientWidth-4; if(w<=0) return;
+    var chips=box.querySelectorAll('.pme-eff');
+    for(var i=0;i<chips.length;i++){
+      var ch=chips[i]; ch.style.fontSize='';
+      var sw=ch.scrollWidth; if(sw<=w) continue;
+      var fs=10*w/sw; if(fs<6) fs=6;
+      ch.style.fontSize=fs.toFixed(2)+'px';
+      var g=0;
+      while(ch.scrollWidth>w && fs>6 && g++<4){ fs=Math.max(6, fs*0.92); ch.style.fontSize=fs.toFixed(2)+'px'; }
+    }
+  }
+  var _fitTO;
+  window.addEventListener('resize', function(){
+    clearTimeout(_fitTO);
+    _fitTO=setTimeout(function(){
+      var bs=document.querySelectorAll('.slot-pme');
+      for(var i=0;i<bs.length;i++){ if(bs[i].offsetParent) fitChips(bs[i]); }
+    }, 150);
+  });
   function fmtRange(lo, hi){ var a=lo.toFixed(3), b=hi.toFixed(3); return (a===b)?a:a+'~'+b; }
   function fmtVal(lo, hi, ex, showExp){ var a=lo.toFixed(3), b=hi.toFixed(3);
     if(a===b) return a; return showExp?(a+'~'+b+'('+ex.toFixed(3)+')'):(a+'~'+b); }
